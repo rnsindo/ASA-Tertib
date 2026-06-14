@@ -324,6 +324,26 @@
             <input id="defaultServiceMinutes" class="input" type="number" min="1" max="240" wire:model="defaultServiceMinutes">
             @error('defaultServiceMinutes') <span class="error">{{ $message }}</span> @enderror
         </div>
+
+        <div class="settings-switch-row">
+            <div>
+                <strong>Aktifkan Quota Harian</strong>
+                <span>Jika nonaktif, layanan tidak dibatasi total antrian harian.</span>
+            </div>
+            <label class="switch" aria-label="Aktifkan Quota Harian">
+                <input type="checkbox" wire:model.live="dailyQuotaEnabled">
+                <span class="switch-track"></span>
+            </label>
+        </div>
+
+        @if($dailyQuotaEnabled)
+            <div class="field">
+                <label for="dailyQuotaLimit">Total Quota Harian</label>
+                <input id="dailyQuotaLimit" class="input" type="number" min="1" max="100000" wire:model="dailyQuotaLimit">
+                <div class="muted" style="font-size: 12px;">Angka ini menjadi batas harian untuk setiap layanan aktif pada sesi berjalan.</div>
+                @error('dailyQuotaLimit') <span class="error">{{ $message }}</span> @enderror
+            </div>
+        @endif
     </section>
 
     <button type="button" class="btn btn-primary" wire:click="save" wire:loading.attr="disabled" wire:target="save">

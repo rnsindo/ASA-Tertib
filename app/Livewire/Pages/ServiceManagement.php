@@ -6,6 +6,7 @@ use App\Models\QueueService;
 use App\Models\QueueServiceDependency;
 use App\Models\ServiceCounter;
 use App\Models\ServiceDailyQuota;
+use App\Models\AppSetting;
 use App\Models\User;
 use App\Services\QueueRuntimeService;
 use Illuminate\Support\Facades\DB;
@@ -71,7 +72,7 @@ class ServiceManagement extends Component
                         'queue_service_id' => $service->id,
                     ],
                     [
-                        'max_daily_quota' => 200,
+                        'max_daily_quota' => max(1, (int) AppSetting::getValue('queue.daily_quota_limit', 200)),
                         'is_open' => true,
                     ],
                 );

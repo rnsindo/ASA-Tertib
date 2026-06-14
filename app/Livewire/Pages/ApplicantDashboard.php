@@ -26,6 +26,7 @@ class ApplicantDashboard extends Component
 
     public ?int $selectedServiceId = null;
     public string $queue_code = '';
+    public ?string $dashboardNotice = null;
 
     public function positionFor(QueueTicket $ticket): ?int
     {
@@ -101,11 +102,59 @@ class ApplicantDashboard extends Component
         return max(1, (int) $value);
     }
 
+    private function serviceUnavailableMessage(QueueService $service): ?string
+    {
+        $queueRuntime = app(QueueRuntimeService::class);
+        $currentSession = $queueRuntime->currentSession();
+        $applicant = auth()->user()?->applicant()->first();
+        $quota = $queueRuntime->quotaStatus($service, $currentSession);
+
+        if ($quota['is_full'] ?? false) {
+            return 'Antrian layanan ' . $service->name . ' sudah penuh untuk hari ini. Registrasi Anda tetap berhasil tersimpan. Silakan hubungi petugas atau kembali pada jadwal layanan berikutnya.';
+        }
+
+        if ($applicant && $dependencyMessage = $queueRuntime->dependencyError($applicant, $service, $currentSession)) {
+            return $dependencyMessage;
+        }
+
+        return null;
+    }
+
     public function openQueueScanner(int $serviceId): void
     {
-        $this->selectedServiceId = $serviceId;
+        $service = QueueService::find($serviceId);
+
+        if (! $service) {
+            $this->dashboardNotice = 'Layanan tidak ditemukan atau sudah tidak aktif.';
+            $this->selectedServiceId = null;
+            $this->dispatch('queue-scanner-stop');
+
+            return;
+        }
+
+        if ($message = $this->serviceUnavailableMessage($service)) {
+            $this->dashboardNotice = $message;
+            $this->selectedServiceId = null;
+            $this->dispatch('queue-scanner-stop');
+
+            return;
+        }
+
+        $this->dashboardNotice = null;
+        $this->selectedServiceId = $service->id;
         $this->queue_code = '';
         $this->resetErrorBag('queue_code');
+    }
+
+    public function showServiceUnavailableMessage(int $serviceId): void
+    {
+        $service = QueueService::find($serviceId);
+
+        $this->dashboardNotice = $service
+            ? ($this->serviceUnavailableMessage($service) ?: 'Layanan masih tersedia. Silakan tekan Ambil Antrian.')
+            : 'Layanan tidak ditemukan atau sudah tidak aktif.';
+        $this->selectedServiceId = null;
+        $this->dispatch('queue-scanner-stop');
     }
 
     public function closeQueueScanner(): void

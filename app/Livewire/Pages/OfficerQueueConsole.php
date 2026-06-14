@@ -4,6 +4,7 @@ namespace App\Livewire\Pages;
 
 use App\Models\Applicant;
 use App\Models\AttendanceCheckin;
+use App\Models\QueueService;
 use App\Models\QueueSessionQrCode;
 use App\Models\QueueTicket;
 use App\Models\ServiceCounter;
@@ -32,6 +33,8 @@ class OfficerQueueConsole extends Component
     public ?int $selectedCounterId = null;
     public ?int $transferTargetCounterId = null;
     public ?int $transferTicketId = null;
+    public ?int $assigningApplicantId = null;
+    public ?int $assigningServiceId = null;
     public string $search = '';
     public int $visibleApplicantCount = self::APPLICANT_BATCH_SIZE;
     public string $notes = '';
@@ -68,6 +71,8 @@ class OfficerQueueConsole extends Component
         $this->selectedCounterId = $counterId;
         $this->transferTargetCounterId = null;
         $this->transferTicketId = null;
+        $this->assigningApplicantId = null;
+        $this->assigningServiceId = null;
     }
 
     public function updatedSearch(): void
@@ -78,6 +83,11 @@ class OfficerQueueConsole extends Component
     public function updatedTransferTargetCounterId(): void
     {
         $this->resetErrorBag('transferTargetCounterId');
+    }
+
+    public function updatedAssigningServiceId(): void
+    {
+        $this->resetErrorBag('assigningServiceId');
     }
 
     public function loadMoreApplicants(): void
@@ -134,6 +144,97 @@ class OfficerQueueConsole extends Component
         $this->notes = '';
     }
 
+    public function openAssignServiceModal(int $applicantId): void
+    {
+        $applicant = Applicant::findOrFail($applicantId);
+        $currentSession = app(QueueRuntimeService::class)->currentSession();
+
+        $hasActiveTicket = QueueTicket::query()
+            ->where('applicant_id', $applicant->id)
+            ->whereIn('status', self::ACTIVE_QUEUE_STATUSES)
+            ->where(function (Builder $query) use ($currentSession) {
+                $query->where('queue_session_id', $currentSession->id)
+                    ->orWhereDate('queue_date', $currentSession->session_date);
+            })
+            ->exists();
+
+        if ($hasActiveTicket) {
+            $this->addError('search', 'Pendaftar ini sedang berada dalam antrian aktif.');
+
+            return;
+        }
+
+        $this->assigningApplicantId = $applicant->id;
+        $this->assigningServiceId = null;
+        $this->resetErrorBag('assigningServiceId');
+    }
+
+    public function closeAssignServiceModal(): void
+    {
+        $this->assigningApplicantId = null;
+        $this->assigningServiceId = null;
+        $this->resetErrorBag('assigningServiceId');
+    }
+
+    public function confirmAssignApplicantToService(): void
+    {
+        if (! $this->assigningApplicantId) {
+            $this->addError('assigningServiceId', 'Pilih pendaftar terlebih dahulu.');
+
+            return;
+        }
+
+        if (! $this->assigningServiceId) {
+            $this->addError('assigningServiceId', 'Pilih layanan yang akan diambil pendaftar.');
+
+            return;
+        }
+
+        $queueRuntime = app(QueueRuntimeService::class);
+        $currentSession = $queueRuntime->currentSession();
+        $applicant = Applicant::findOrFail($this->assigningApplicantId);
+        $service = QueueService::query()
+            ->where('is_active', true)
+            ->find($this->assigningServiceId);
+
+        if (! $service) {
+            $this->addError('assigningServiceId', 'Layanan tidak tersedia atau sedang dinonaktifkan.');
+
+            return;
+        }
+
+        [$canCreate, $message] = $queueRuntime->canCreateTicket($applicant, $service, $currentSession);
+
+        if (! $canCreate) {
+            $this->addError('assigningServiceId', $message);
+
+            return;
+        }
+
+        $counter = $queueRuntime->recommendedCounter($service, null, $currentSession);
+
+        if (! $counter) {
+            $this->addError('assigningServiceId', 'Belum ada loket yang buka untuk layanan ' . $service->name . '. Buka minimal satu loket terlebih dahulu.');
+
+            return;
+        }
+
+        $ticket = $queueRuntime->createTicket(
+            $applicant,
+            $service,
+            $counter,
+            auth()->user(),
+            null,
+            $this->notes ?: null,
+            $currentSession,
+        );
+
+        session()->flash('status', 'Pendaftar dimasukkan ke ' . $counter->name . ' untuk layanan ' . $service->name . ' dengan nomor ' . $ticket->ticket_code . '.');
+
+        $this->notes = '';
+        $this->closeAssignServiceModal();
+    }
+
     public function confirmApplicantPresence(int $applicantId): void
     {
         $applicant = Applicant::findOrFail($applicantId);
@@ -143,6 +244,12 @@ class OfficerQueueConsole extends Component
 
     public function generateCheckInQr(): void
     {
+        if (! $this->canManageQueueQr()) {
+            $this->addError('selectedCounterId', 'Anda tidak memiliki izin untuk membuat atau mengganti QR & kode ambil antrian.');
+
+            return;
+        }
+
         $result = app(QueueRuntimeService::class)->createCheckInQr(auth()->user());
 
         $this->generatedCheckInUrl = $result['url'];
@@ -536,6 +643,43 @@ class OfficerQueueConsole extends Component
                 ->find($this->transferTicketId)
             : null;
 
+        $assigningApplicant = $this->assigningApplicantId
+            ? Applicant::query()
+                ->with('user')
+                ->find($this->assigningApplicantId)
+            : null;
+
+        $assignmentServices = QueueService::query()
+            ->where('is_active', true)
+            ->orderBy('sort_order')
+            ->orderBy('name')
+            ->get();
+
+        $assignmentServiceStatuses = $assignmentServices->mapWithKeys(function (QueueService $service) use ($queueRuntime, $currentSession, $assigningApplicant): array {
+            $quota = $queueRuntime->quotaStatus($service, $currentSession);
+            $dependencyError = $assigningApplicant ? $queueRuntime->dependencyError($assigningApplicant, $service, $currentSession) : null;
+            $recommendedCounter = $queueRuntime->recommendedCounter($service, null, $currentSession);
+            $unavailableMessage = null;
+
+            if ($quota['is_full'] ?? false) {
+                $unavailableMessage = 'Kuota layanan penuh.';
+            } elseif ($dependencyError) {
+                $unavailableMessage = $dependencyError;
+            } elseif (! $recommendedCounter) {
+                $unavailableMessage = 'Belum ada loket yang buka.';
+            }
+
+            return [
+                $service->id => [
+                    'quota' => $quota,
+                    'dependency_error' => $dependencyError,
+                    'recommended_counter' => $recommendedCounter,
+                    'can_queue' => $unavailableMessage === null,
+                    'unavailable_message' => $unavailableMessage,
+                ],
+            ];
+        });
+
         $noShowTickets = QueueTicket::query()
             ->with(['applicant.user', 'service', 'counter'])
             ->when($selectedCounter, fn (Builder $query) => $query->where('service_counter_id', $selectedCounter->id), fn (Builder $query) => $query->whereRaw('1 = 0'))
@@ -557,6 +701,7 @@ class OfficerQueueConsole extends Component
             'transferCounters' => $this->transferTargetCounters(),
             'selectedCounter' => $selectedCounter,
             'isCounterManager' => $this->canManageAllCounters(),
+            'canManageQueueQr' => $this->canManageQueueQr(),
             'assignedCountersCount' => $counters->count(),
             'waitingCount' => $activeTickets->where('status', QueueTicket::STATUS_WAITING)->count(),
             'completedCount' => $completedCount,
@@ -573,6 +718,9 @@ class OfficerQueueConsole extends Component
             'activeTickets' => $activeTickets,
             'firstWaitingTicketId' => $firstWaitingTicketId,
             'transferTicket' => $transferTicket,
+            'assigningApplicant' => $assigningApplicant,
+            'assignmentServices' => $assignmentServices,
+            'assignmentServiceStatuses' => $assignmentServiceStatuses,
             'noShowTickets' => $noShowTickets,
         ]);
     }
@@ -595,6 +743,16 @@ class OfficerQueueConsole extends Component
         return (bool) (
             $user
             && ($user->can('admin.manajemen_layanan') || $user->hasAnyRole(['superadmin', 'admin', 'Super Admin']))
+        );
+    }
+
+    private function canManageQueueQr(): bool
+    {
+        $user = auth()->user();
+
+        return (bool) (
+            $user
+            && ($user->can('petugas.kelola_qr_antrian') || $user->hasAnyRole(['superadmin', 'admin', 'Super Admin']))
         );
     }
 

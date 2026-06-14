@@ -126,6 +126,16 @@
             line-height: 1.3;
         }
 
+        .service-quota-message {
+            border: 1px solid #fecaca;
+            border-radius: 8px;
+            padding: 10px;
+            background: #fef2f2;
+            color: #991b1b;
+            font-size: 12px;
+            line-height: 1.45;
+        }
+
         .log-list {
             padding: 6px 14px 14px;
             display: grid;
@@ -283,6 +293,10 @@
             </div>
         @endif
 
+        @if($dashboardNotice)
+            <div class="alert alert-danger">{{ $dashboardNotice }}</div>
+        @endif
+
         <section id="status-layanan" class="stack">
             <div class="section-title">
                 <strong>Status Layanan</strong>
@@ -312,6 +326,13 @@
                             <div class="muted">Kuota: {{ $quota['label'] ?? 'Tanpa batas' }}</div>
                             @if($quota['is_full'] ?? false)
                                 <span class="badge" style="background: #fee2e2; color: #991b1b;">Antrian Penuh</span>
+                                <div class="service-quota-message">
+                                    Antrian layanan {{ $service->name }} sudah penuh untuk hari ini. Registrasi Anda tetap berhasil tersimpan.
+                                </div>
+                                <button type="button" class="btn btn-outline btn-small" wire:click="showServiceUnavailableMessage({{ $service->id }})">
+                                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg>
+                                    Ambil Antrian
+                                </button>
                             @elseif($serviceStatus['dependency_error'] ?? null)
                                 <div class="muted">{{ $serviceStatus['dependency_error'] }}</div>
                             @else

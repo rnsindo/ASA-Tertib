@@ -26,6 +26,7 @@ class DatabaseSeeder extends Seeder
     public function run(): void
     {
         app(PermissionRegistrar::class)->forgetCachedPermissions();
+        $seedMode = $this->seedMode();
 
         Permission::query()
             ->whereIn('name', [
@@ -57,6 +58,7 @@ class DatabaseSeeder extends Seeder
             'admin.login_sebagai_user' => 'Admin - Login Sebagai User',
             'petugas.beranda' => 'Petugas - Beranda',
             'petugas.konsol_antrian' => 'Petugas - Konsol Antrian',
+            'petugas.kelola_qr_antrian' => 'Petugas - Kelola QR Antrian',
             'pelanggan.beranda' => 'Pelanggan/Penanya - Beranda',
             'pelanggan.dashboard_antrian' => 'Pelanggan/Penanya - Dashboard Antrian',
             'pelanggan.status_antrian' => 'Pelanggan/Penanya - Status Antrian',
@@ -176,11 +178,26 @@ class DatabaseSeeder extends Seeder
                 'is_public' => false,
                 'sort_order' => 1,
             ],
-        ])->each(function (array $setting): void {
-            AppSetting::updateOrCreate(
-                ['key' => $setting['key']],
-                $setting,
-            );
+            [
+                'key' => 'queue.daily_quota_enabled',
+                'group' => 'queue',
+                'label' => 'Aktifkan Quota Harian',
+                'type' => AppSetting::TYPE_BOOLEAN,
+                'value' => '1',
+                'is_public' => false,
+                'sort_order' => 2,
+            ],
+            [
+                'key' => 'queue.daily_quota_limit',
+                'group' => 'queue',
+                'label' => 'Total Quota Harian',
+                'type' => AppSetting::TYPE_INTEGER,
+                'value' => '200',
+                'is_public' => false,
+                'sort_order' => 3,
+            ],
+        ])->each(function (array $setting) use ($seedMode): void {
+            $this->seedAppSetting($setting, $seedMode);
         });
 
         $superAdmin = User::updateOrCreate(
@@ -281,21 +298,56 @@ class DatabaseSeeder extends Seeder
         $queueRuntime = app(QueueRuntimeService::class);
         $session = $queueRuntime->currentSession();
 
-        collect([$verification, $interview])->each(function (QueueService $service) use ($session, $queueRuntime): void {
-            ServiceDailyQuota::updateOrCreate(
-                [
-                    'queue_session_id' => $session->id,
-                    'queue_service_id' => $service->id,
-                ],
-                [
-                    'max_daily_quota' => 200,
-                    'is_open' => true,
-                ],
-            );
+        $defaultDailyQuota = max(1, (int) AppSetting::getValue('queue.daily_quota_limit', 200));
+
+        collect([$verification, $interview])->each(function (QueueService $service) use ($session, $queueRuntime, $seedMode, $defaultDailyQuota): void {
+            $quotaKeys = [
+                'queue_session_id' => $session->id,
+                'queue_service_id' => $service->id,
+            ];
+            $quotaValues = [
+                'max_daily_quota' => $defaultDailyQuota,
+                'is_open' => true,
+            ];
+
+            if ($this->seedModeUpdatesExistingRows($seedMode)) {
+                ServiceDailyQuota::updateOrCreate($quotaKeys, $quotaValues);
+            } else {
+                ServiceDailyQuota::firstOrCreate($quotaKeys, $quotaValues);
+            }
 
             $queueRuntime->ensureAllocations($service, $session);
         });
 
         app(PermissionRegistrar::class)->forgetCachedPermissions();
+    }
+
+    private function seedMode(): string
+    {
+        $mode = str_replace('-', '_', strtolower((string) config('seed.sync_mode', 'add_only')));
+
+        return in_array($mode, ['add_only', 'sync'], true) ? $mode : 'add_only';
+    }
+
+    private function seedModeUpdatesExistingRows(string $seedMode): bool
+    {
+        return $seedMode === 'sync';
+    }
+
+    private function seedAppSetting(array $setting, string $seedMode): void
+    {
+        if ($this->seedModeUpdatesExistingRows($seedMode)) {
+            AppSetting::updateOrCreate(
+                ['key' => $setting['key']],
+                $setting,
+            );
+
+            return;
+        }
+
+        AppSetting::firstOrCreate(
+            ['key' => $setting['key']],
+            $setting,
+        );
     }
 }

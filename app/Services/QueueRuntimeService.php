@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Applicant;
 use App\Models\ApplicantServiceRecord;
+use App\Models\AppSetting;
 use App\Models\AttendanceCheckin;
 use App\Models\CounterDailyAllocation;
 use App\Models\QueueService;
@@ -152,13 +153,14 @@ class QueueRuntimeService
     public function quotaStatus(QueueService $service, ?QueueSession $session = null): array
     {
         $session ??= $this->currentSession();
+        $dailyQuotaEnabled = $this->dailyQuotaEnabled();
         $quota = ServiceDailyQuota::query()
             ->where('queue_session_id', $session->id)
             ->where('queue_service_id', $service->id)
             ->first();
 
         $used = $this->serviceTicketCount($service, $session);
-        $max = $quota?->max_daily_quota;
+        $max = $dailyQuotaEnabled ? ($quota?->max_daily_quota ?? $this->defaultDailyQuotaLimit()) : null;
         $isOpen = $quota?->is_open ?? true;
         $isFull = $max !== null && $used >= $max;
 
@@ -168,8 +170,9 @@ class QueueRuntimeService
             'max' => $max,
             'remaining' => $max === null ? null : max(0, $max - $used),
             'is_open' => $isOpen,
-            'is_full' => ! $isOpen || $isFull,
+            'is_full' => $dailyQuotaEnabled && (! $isOpen || $isFull),
             'label' => $max === null ? 'Tanpa batas' : $used . ' / ' . $max,
+            'is_enabled' => $dailyQuotaEnabled,
         ];
     }
 
@@ -186,6 +189,7 @@ class QueueRuntimeService
     public function allocationStatus(ServiceCounter $counter, ?QueueSession $session = null): array
     {
         $session ??= $this->currentSession();
+        $dailyQuotaEnabled = $this->dailyQuotaEnabled();
         $allocation = CounterDailyAllocation::query()
             ->where('queue_session_id', $session->id)
             ->where('service_counter_id', $counter->id)
@@ -199,15 +203,20 @@ class QueueRuntimeService
         return [
             'allocation' => $allocation,
             'used' => $used,
-            'target' => $allocation?->target_quota,
-            'is_at_target' => $allocation?->target_quota !== null && $used >= $allocation->target_quota,
-            'label' => $allocation ? $used . ' / ' . $allocation->target_quota : (string) $used,
+            'target' => $dailyQuotaEnabled ? $allocation?->target_quota : null,
+            'is_at_target' => $dailyQuotaEnabled && $allocation?->target_quota !== null && $used >= $allocation->target_quota,
+            'label' => $dailyQuotaEnabled && $allocation ? $used . ' / ' . $allocation->target_quota : (string) $used,
         ];
     }
 
     public function ensureAllocations(QueueService $service, ?QueueSession $session = null): void
     {
         $session ??= $this->currentSession();
+
+        if (! $this->dailyQuotaEnabled()) {
+            return;
+        }
+
         $quotaStatus = $this->quotaStatus($service, $session);
         $max = $quotaStatus['max'];
 
@@ -217,7 +226,6 @@ class QueueRuntimeService
 
         $counters = ServiceCounter::query()
             ->where('queue_service_id', $service->id)
-            ->where('is_active', true)
             ->orderBy('sort_order')
             ->orderBy('id')
             ->get();
@@ -318,7 +326,7 @@ class QueueRuntimeService
         $quotaStatus = $this->quotaStatus($service, $session);
 
         if ($quotaStatus['is_full']) {
-            return [false, 'Antrian layanan ' . $service->name . ' sudah penuh untuk hari ini. Registrasi pendaftar tetap tersimpan.'];
+            return [false, 'Antrian layanan ' . $service->name . ' sudah penuh untuk hari ini. Registrasi pendaftar tetap tersimpan, tetapi belum bisa mengambil antrian layanan ini. Silakan hubungi petugas atau kembali pada jadwal layanan berikutnya.'];
         }
 
         if ($dependencyMessage = $this->dependencyError($applicant, $service, $session)) {
@@ -548,5 +556,15 @@ class QueueRuntimeService
         } while (QueueSessionQrCode::query()->where('manual_code', $code)->where('is_active', true)->exists());
 
         return $code;
+    }
+
+    private function dailyQuotaEnabled(): bool
+    {
+        return (bool) AppSetting::getValue('queue.daily_quota_enabled', true);
+    }
+
+    private function defaultDailyQuotaLimit(): int
+    {
+        return max(1, (int) AppSetting::getValue('queue.daily_quota_limit', 200));
     }
 }

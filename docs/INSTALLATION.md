@@ -78,7 +78,7 @@ Jika akan menggunakan upload logo atau favicon dari halaman pengaturan, pastikan
 php artisan storage:link
 ```
 
-Seeder akan membuat data dasar layanan, loket, setting aplikasi, sesi antrian hari berjalan, kuota default 200 per layanan, dan alokasi target loket awal.
+Seeder akan membuat data dasar layanan, loket, setting aplikasi, sesi antrian hari berjalan, quota harian default aktif 200 per layanan, dan alokasi target loket awal.
 
 Data akun awal:
 
@@ -92,16 +92,24 @@ Data master awal:
 
 - Role default: `Super Admin`, `Petugas`, `Pelanggan/Penanya`.
 - Permission admin: `admin.pengaturan_aplikasi`, `admin.manajemen_layanan`, `admin.manajemen_user`, `admin.reset_password_user`, `admin.login_sebagai_user`.
-- Permission petugas: `petugas.beranda`, `petugas.konsol_antrian`.
+- Permission petugas: `petugas.beranda`, `petugas.konsol_antrian`, `petugas.kelola_qr_antrian`.
+- Role `Petugas` hanya mendapat default `petugas.beranda` dan `petugas.konsol_antrian`. Permission `petugas.kelola_qr_antrian` tersedia di seeder tetapi harus ditambahkan manual ke akun petugas tertentu jika petugas tersebut boleh membuat atau mengganti QR/kode ambil antrian.
 - Permission pelanggan/penanya: `pelanggan.beranda`, `pelanggan.dashboard_antrian`, `pelanggan.status_antrian`, `pelanggan.scan_qr`, `pelanggan.riwayat`, `pelanggan.profil`.
 - Layanan: `Verifikasi Berkas` dan `Wawancara`.
 - Loket: `VB-1`, `VB-2`, `WW-1`, `WW-2`.
 - Penugasan demo: `petugas@example.test` ditugaskan pada loket pertama tiap layanan agar dashboard petugas langsung memiliki contoh tugas.
 - Dependensi: `Wawancara` baru bisa diambil setelah `Verifikasi Berkas` selesai.
-- Kuota: 200 antrian per layanan untuk sesi hari berjalan.
+- Quota harian: aktif, 200 antrian per layanan untuk sesi hari berjalan.
 - Setting aplikasi: `app.name`, `app.logo`, `app.logo_enabled`, `app.favicon`, `app.primary_color`.
 - Setting zona waktu: `app.timezone = Asia/Jakarta`.
 - Setting estimasi: `queue.default_service_minutes = 10`.
+- Setting quota: `queue.daily_quota_enabled = true`, `queue.daily_quota_limit = 200`.
+
+Mode seeder default adalah `add_only`, sehingga `php artisan db:seed` saat update aplikasi hanya menambahkan setting baru yang belum ada dan tidak menimpa pengaturan yang sudah diubah dari halaman aplikasi. Jika benar-benar ingin menyinkronkan ulang default dari kode seeder, set environment berikut sebelum menjalankan seeder:
+
+```env
+SEED_SYNC_MODE=sync
+```
 
 8. Jalankan server lokal:
 
@@ -119,7 +127,7 @@ http://127.0.0.1:8000/login
 
 Halaman `/pengaturan-aplikasi` tersedia untuk role `Super Admin`. Menu `Pengaturan Aplikasi` muncul di drawer jika user memiliki permission `admin.pengaturan_aplikasi`.
 
-Halaman ini mengelola data pada tabel `app_settings`, termasuk nama aplikasi, upload/aktif-nonaktif logo, upload favicon browser, warna utama, zona waktu aplikasi, dan estimasi awal pelayanan. Tampilan halaman berupa form mobile, bukan tabel daftar setting mentah.
+Halaman ini mengelola data pada tabel `app_settings`, termasuk nama aplikasi, upload/aktif-nonaktif logo, upload favicon browser, warna utama, zona waktu aplikasi, estimasi awal pelayanan, dan switch quota harian. Tampilan halaman berupa form mobile, bukan tabel daftar setting mentah.
 
 Favicon memakai setting `app.favicon`. Jika kosong, aplikasi memakai logo aktif sebagai fallback. Jika logo juga kosong atau file ikon gagal dimuat di browser, layout memakai ikon SVG otomatis dari huruf awal nama aplikasi dan warna utama.
 

@@ -65,6 +65,7 @@ Permission petugas:
 
 - `petugas.beranda` - akses navigasi Home petugas.
 - `petugas.konsol_antrian` - akses konsol petugas/loket.
+- `petugas.kelola_qr_antrian` - membuat atau mengganti QR dan kode ambil antrian. Permission ini tidak diberikan default ke role `Petugas`; tambahkan manual pada akun petugas tertentu.
 
 Permission pelanggan/penanya:
 
@@ -101,7 +102,7 @@ Seeder utama membuat:
 - Sesi antrian aktif untuk hari berjalan.
 - Kuota default 200 per layanan pada sesi hari berjalan.
 - Alokasi target loket otomatis berdasarkan kuota dan jumlah loket aktif.
-- Setting awal `app.name`, `app.logo`, `app.logo_enabled`, `app.favicon`, `app.primary_color`, `app.timezone`, dan `queue.default_service_minutes`.
+- Setting awal `app.name`, `app.logo`, `app.logo_enabled`, `app.favicon`, `app.primary_color`, `app.timezone`, `queue.default_service_minutes`, `queue.daily_quota_enabled`, dan `queue.daily_quota_limit`.
 
 Demo account memakai password default `password123`.
 
@@ -164,7 +165,7 @@ Pendaftar wajib berada di lokasi sebelum mengambil antrian. Pada dashboard penda
 
 Saat tombol ditekan, aplikasi membuka modal kamera untuk membaca QR aktif di lokasi layanan. Jika QR terbaca, aplikasi langsung memproses pengambilan antrian otomatis tanpa klik tombol. Jika kamera atau scan QR bermasalah, pendaftar dapat mengisi kode manual aktif yang ditampilkan/diberikan petugas. QR dan kode manual memiliki fungsi yang sama.
 
-Konsol petugas menyediakan tombol `Download QR` saat QR/kode aktif tersedia. Tombol ini membuka halaman print A4 `/petugas/qr-ambil-antrian/print` tanpa header/nav aplikasi. Halaman tersebut menampilkan kode manual besar di bagian atas, QR SVG besar di tengah kertas, masa berlaku, link QR, dan tombol `Cetak / Simpan PDF`. QR print dibuat dari kode manual aktif sehingga tetap bisa dicetak ulang walaupun token QR mentah tidak disimpan di database.
+Konsol petugas menyediakan tombol `Download QR` saat QR/kode aktif tersedia. Tombol ini membuka halaman print A4 `/petugas/qr-ambil-antrian/print` tanpa header/nav aplikasi. Halaman tersebut menampilkan kode manual besar di bagian atas, QR SVG besar di tengah kertas, masa berlaku, link QR, dan tombol `Cetak / Simpan PDF`. QR print dibuat dari kode manual aktif sehingga tetap bisa dicetak ulang walaupun token QR mentah tidak disimpan di database. Tombol `Buat/Ganti QR & Kode` dilindungi permission `petugas.kelola_qr_antrian`, sehingga hanya Super Admin atau petugas yang diberi permission manual yang dapat membuat QR/kode baru.
 
 Semua tampilan waktu operasional memakai setting `app.timezone`, default `Asia/Jakarta`. Header dashboard authenticated menampilkan hari, tanggal, jam, menit, dan detik berjalan sesuai timezone tersebut.
 
@@ -195,9 +196,14 @@ Sistem mengecek `service_daily_quotas` sebelum membuat tiket.
 
 - Jika kuota layanan penuh, registrasi tetap bisa dilakukan tetapi tiket layanan tersebut tidak dibuat.
 - Hitungan kuota mencakup semua tiket yang pernah dibuat pada layanan dan tanggal tersebut, termasuk selesai, batal, pindah, dan tidak di tempat.
+- Switch `queue.daily_quota_enabled` pada Pengaturan Aplikasi menentukan apakah batas quota harian aktif. Jika nonaktif, runtime menampilkan quota sebagai `Tanpa batas` dan tidak memblokir pembuatan tiket berdasarkan quota.
+- Nilai `queue.daily_quota_limit` menjadi total quota harian default. Saat disimpan dari Pengaturan Aplikasi, sistem menyinkronkan quota sesi berjalan untuk semua layanan aktif tanpa mengubah status buka/tutup layanan yang sudah ada.
+- Dashboard pendaftar tetap menampilkan layanan yang quota-nya penuh, tetapi tombol `Ambil Antrian` tidak membuka scanner. Sistem menampilkan pesan bahwa registrasi tetap tersimpan dan pendaftar belum bisa mengambil antrian layanan tersebut.
 - Kuota penuh hanya berlaku untuk layanan terkait; layanan lain tetap bisa diambil jika masih tersedia dan prasyaratnya terpenuhi.
 
 Saat kuota tersedia, sistem membuat atau memperbarui `counter_daily_allocations` lalu memilih loket rekomendasi berdasarkan rasio beban paling rendah. Jika loket pilihan petugas sudah memenuhi target dan ada loket lain yang masih di bawah target, tiket diarahkan ke loket rekomendasi.
+
+Target maksimal normal per loket aktif saat `queue.daily_quota_enabled` aktif dihitung dari total quota harian layanan dibagi jumlah seluruh loket pada layanan tersebut, termasuk loket yang sedang buka maupun tutup/nonaktif. Contoh quota harian 200 dengan 10 loket menghasilkan target 20 pendaftar per loket. Pemilihan otomatis hanya memilih loket yang sedang buka, tetapi denominator target tetap seluruh loket agar pembagian kapasitas operasional tetap baku.
 
 ## Aturan layanan dinamis
 
@@ -234,7 +240,7 @@ Tabel `app_settings` disiapkan untuk menyimpan setting aplikasi yang dapat berke
 
 Kolom `key`, `group`, `label`, `type`, `value`, `options`, `is_public`, dan `sort_order` memungkinkan penambahan variable setting baru tanpa membuat tabel baru.
 
-Halaman `/pengaturan-aplikasi` memungkinkan Super Admin mengubah setting utama aplikasi. Tampilan halaman dibuat sebagai form mobile, bukan tabel mentah, sehingga pengguna hanya melihat kontrol yang relevan seperti input teks untuk nama aplikasi, browse/upload file untuk logo dan favicon, thumbnail aktif dengan fallback, color picker untuk warna utama, pilihan zona waktu, input angka untuk estimasi, dan switch untuk aktif/nonaktif logo. Akses halaman dan menu drawer dilindungi permission `admin.pengaturan_aplikasi`.
+Halaman `/pengaturan-aplikasi` memungkinkan Super Admin mengubah setting utama aplikasi. Tampilan halaman dibuat sebagai form mobile, bukan tabel mentah, sehingga pengguna hanya melihat kontrol yang relevan seperti input teks untuk nama aplikasi, browse/upload file untuk logo dan favicon, thumbnail aktif dengan fallback, color picker untuk warna utama, pilihan zona waktu, input angka untuk estimasi, switch untuk aktif/nonaktif logo, serta switch quota harian yang menampilkan input total quota hanya saat aktif. Akses halaman dan menu drawer dilindungi permission `admin.pengaturan_aplikasi`.
 
 Favicon browser menggunakan setting `app.favicon`. Jika kosong, layout memakai logo aktif sebagai fallback. Jika favicon/logo gagal dimuat, layout mengganti ikon tab ke SVG otomatis dari huruf awal nama aplikasi dan warna utama.
 
@@ -319,7 +325,7 @@ Bagian ringkasan dashboard petugas memakai tiga indikator icon: `Menunggu`, `Sel
 
 Bagian `Antrian Loket Ini` ditempatkan langsung setelah ringkasan dashboard petugas. Data ditampilkan sebagai card mobile, bukan tabel, agar mudah dioperasikan dari HP. Tombol `Panggil` hanya muncul untuk tiket berstatus `Antrian` dengan urutan menunggu paling awal pada loket tersebut. Tombol `Pindah` membuka modal pemilihan loket tujuan; loket tempat pendaftar sedang antri tetap ditampilkan sebagai konteks tetapi tidak bisa dipilih sebagai tujuan.
 
-Bagian `Arahkan Pendaftar ke Loket` memakai card mobile dan scroll internal. Daftar hanya menampilkan akun yang memiliki role pelanggan/pendaftar, yaitu role `Pelanggan/Penanya` beserta alias kompatibilitas lama seperti `Pengguna` dan `applicant`. Data dibatasi pada pendaftar hari tersebut, termasuk pendaftar lama yang sudah check-in atau sudah punya tiket pada sesi berjalan. Urutan daftar mendahulukan pendaftar yang belum/sedang tidak berada dalam antrian aktif, lalu pendaftar yang sudah antri ditempatkan setelahnya. Di dalam masing-masing grup, data diurutkan berdasarkan waktu `attendance_checkins.presence_confirmed_at` paling awal pada sesi hari ini.
+Bagian `Arahkan Pendaftar ke Loket` memakai card mobile dan scroll internal. Daftar hanya menampilkan akun yang memiliki role pelanggan/pendaftar, yaitu role `Pelanggan/Penanya` beserta alias kompatibilitas lama seperti `Pengguna` dan `applicant`. Data dibatasi pada pendaftar hari tersebut, termasuk pendaftar lama yang sudah check-in atau sudah punya tiket pada sesi berjalan. Urutan daftar mendahulukan pendaftar yang belum/sedang tidak berada dalam antrian aktif, lalu pendaftar yang sudah antri ditempatkan setelahnya. Di dalam masing-masing grup, data diurutkan berdasarkan waktu `attendance_checkins.presence_confirmed_at` paling awal pada sesi hari ini. Tombol `Masukkan` membuka modal pilih layanan; setelah petugas menekan `Masukkan` pada modal, sistem mencari loket buka dengan beban paling ringan untuk layanan tersebut.
 
 Jika pendaftar sudah atau sedang masuk antrian pada loket mana pun, tombol `Masukkan` disembunyikan dan card menampilkan informasi loket aktifnya. Sistem hanya memuat 5 data pertama terlebih dahulu, lalu memuat 5 data berikutnya ketika petugas scroll sampai bagian bawah section daftar. Pencarian cepat berdasarkan nama, NISN, WhatsApp, sekolah, atau email akan mereset batch ke 5 data pertama dari hasil filter.
 

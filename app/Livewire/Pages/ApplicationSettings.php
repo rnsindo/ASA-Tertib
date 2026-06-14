@@ -3,6 +3,9 @@
 namespace App\Livewire\Pages;
 
 use App\Models\AppSetting;
+use App\Models\QueueService;
+use App\Models\ServiceDailyQuota;
+use App\Services\QueueRuntimeService;
 use App\Support\AppClock;
 use Illuminate\Validation\Rule;
 use Livewire\Attributes\Layout;
@@ -24,6 +27,8 @@ class ApplicationSettings extends Component
     public string $primaryColor = '#1d4ed8';
     public string $appTimezone = 'Asia/Jakarta';
     public int $defaultServiceMinutes = 10;
+    public bool $dailyQuotaEnabled = true;
+    public int $dailyQuotaLimit = 200;
     public ?TemporaryUploadedFile $logoUpload = null;
     public ?TemporaryUploadedFile $faviconUpload = null;
 
@@ -52,6 +57,8 @@ class ApplicationSettings extends Component
             'primaryColor' => ['required', 'regex:/^#[0-9A-Fa-f]{6}$/'],
             'appTimezone' => ['required', Rule::in(array_keys(AppClock::timezoneOptions()))],
             'defaultServiceMinutes' => ['required', 'integer', 'min:1', 'max:240'],
+            'dailyQuotaEnabled' => ['boolean'],
+            'dailyQuotaLimit' => [$this->dailyQuotaEnabled ? 'required' : 'nullable', 'integer', 'min:1', 'max:100000'],
         ], [
             'primaryColor.regex' => 'Warna utama harus menggunakan format hex, contoh #1d4ed8.',
             'faviconUpload.mimes' => 'Favicon harus berupa file ico, png, jpg, jpeg, atau webp.',
@@ -66,6 +73,8 @@ class ApplicationSettings extends Component
             'primaryColor' => 'Warna Utama',
             'appTimezone' => 'Zona Waktu',
             'defaultServiceMinutes' => 'Estimasi Awal Pelayanan',
+            'dailyQuotaEnabled' => 'Quota Harian',
+            'dailyQuotaLimit' => 'Total Quota Harian',
         ]);
 
         if ($this->logoUpload) {
@@ -135,6 +144,27 @@ class ApplicationSettings extends Component
             'sort_order' => 1,
         ]);
 
+        AppSetting::putValue('queue.daily_quota_enabled', $validated['dailyQuotaEnabled'], [
+            'group' => 'queue',
+            'label' => 'Aktifkan Quota Harian',
+            'type' => AppSetting::TYPE_BOOLEAN,
+            'is_public' => false,
+            'sort_order' => 2,
+        ]);
+
+        AppSetting::putValue('queue.daily_quota_limit', $validated['dailyQuotaLimit'], [
+            'group' => 'queue',
+            'label' => 'Total Quota Harian',
+            'type' => AppSetting::TYPE_INTEGER,
+            'is_public' => false,
+            'sort_order' => 3,
+        ]);
+
+        $this->syncCurrentSessionDailyQuotas(
+            (bool) $validated['dailyQuotaEnabled'],
+            (int) $validated['dailyQuotaLimit'],
+        );
+
         session()->flash('status', 'Pengaturan aplikasi berhasil disimpan.');
         $this->logoUpload = null;
         $this->faviconUpload = null;
@@ -150,6 +180,34 @@ class ApplicationSettings extends Component
         $this->primaryColor = (string) AppSetting::getValue('app.primary_color', '#1d4ed8');
         $this->appTimezone = AppClock::timezone();
         $this->defaultServiceMinutes = (int) AppSetting::getValue('queue.default_service_minutes', 10);
+        $this->dailyQuotaEnabled = (bool) AppSetting::getValue('queue.daily_quota_enabled', true);
+        $this->dailyQuotaLimit = max(1, (int) AppSetting::getValue('queue.daily_quota_limit', 200));
+    }
+
+    private function syncCurrentSessionDailyQuotas(bool $enabled, int $limit): void
+    {
+        if (! $enabled) {
+            return;
+        }
+
+        $runtime = app(QueueRuntimeService::class);
+        $session = $runtime->currentSession();
+
+        QueueService::query()
+            ->where('is_active', true)
+            ->get()
+            ->each(function (QueueService $service) use ($session, $limit, $runtime): void {
+                $quota = ServiceDailyQuota::query()->firstOrNew([
+                    'queue_session_id' => $session->id,
+                    'queue_service_id' => $service->id,
+                ]);
+
+                $quota->max_daily_quota = $limit;
+                $quota->is_open = $quota->exists ? $quota->is_open : true;
+                $quota->save();
+
+                $runtime->ensureAllocations($service, $session);
+            });
     }
 
     public function render()

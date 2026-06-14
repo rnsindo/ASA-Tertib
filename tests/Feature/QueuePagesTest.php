@@ -25,6 +25,7 @@ use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
 use Livewire\Livewire;
+use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
@@ -75,6 +76,90 @@ class QueuePagesTest extends TestCase
         $response->assertSee('Ambil Antrian');
         $response->assertDontSee('Konfirmasi Kehadiran');
         $response->assertDontSee('Wajib scan QR');
+    }
+
+    public function test_applicant_dashboard_keeps_registration_but_blocks_queue_when_daily_quota_is_full(): void
+    {
+        Role::firstOrCreate(['name' => 'applicant']);
+
+        $user = User::factory()->create([
+            'email' => 'quota-dashboard-applicant@example.test',
+            'password' => 'password123',
+        ]);
+        $user->assignRole('applicant');
+
+        Applicant::create([
+            'user_id' => $user->id,
+            'full_name' => 'Pendaftar Dashboard Quota',
+            'school_origin' => 'SMP Quota',
+            'nisn' => '9988776655',
+            'whatsapp' => '089988776655',
+            'status' => 'registered',
+        ]);
+
+        $runtime = app(QueueRuntimeService::class);
+        $session = $runtime->currentSession();
+
+        $service = QueueService::create([
+            'name' => 'Layanan Dashboard Penuh',
+            'slug' => 'layanan-dashboard-penuh',
+            'code' => 'LDP',
+            'sort_order' => 1,
+            'is_active' => true,
+        ]);
+
+        $counter = ServiceCounter::create([
+            'queue_service_id' => $service->id,
+            'name' => 'Loket Dashboard Penuh',
+            'code' => 'LDP-1',
+            'sort_order' => 1,
+            'is_active' => true,
+        ]);
+
+        ServiceDailyQuota::create([
+            'queue_session_id' => $session->id,
+            'queue_service_id' => $service->id,
+            'max_daily_quota' => 1,
+            'is_open' => true,
+        ]);
+
+        $existingUser = User::factory()->create(['email' => 'quota-dashboard-existing@example.test']);
+        $existingApplicant = Applicant::create([
+            'user_id' => $existingUser->id,
+            'full_name' => 'Pendaftar Existing Dashboard',
+            'school_origin' => 'SMP Existing',
+            'nisn' => '8877665544',
+            'whatsapp' => '088877665544',
+            'status' => 'registered',
+        ]);
+
+        QueueTicket::create([
+            'applicant_id' => $existingApplicant->id,
+            'queue_session_id' => $session->id,
+            'queue_service_id' => $service->id,
+            'service_counter_id' => $counter->id,
+            'queue_date' => today(),
+            'queue_number' => 1,
+            'call_sequence' => 1000,
+            'ticket_code' => 'LDP-001',
+            'status' => QueueTicket::STATUS_COMPLETED,
+            'assigned_at' => now(),
+            'completed_at' => now(),
+        ]);
+
+        $response = $this->actingAs($user)->get('/dashboard');
+
+        $response->assertOk();
+        $response->assertSee('Antrian Penuh');
+        $response->assertSee('Antrian layanan Layanan Dashboard Penuh sudah penuh untuk hari ini.');
+        $response->assertSee('Registrasi Anda tetap berhasil tersimpan.');
+
+        Livewire::actingAs($user)
+            ->test(ApplicantDashboard::class)
+            ->call('openQueueScanner', $service->id)
+            ->assertSet('selectedServiceId', null)
+            ->assertSee('Silakan hubungi petugas atau kembali pada jadwal layanan berikutnya.')
+            ->assertDontSee('Kode Manual');
     }
 
     public function test_officer_console_is_available_to_officer(): void
@@ -296,6 +381,109 @@ class QueuePagesTest extends TestCase
             ->assertDontSee('Bukan Pelanggan');
     }
 
+    public function test_officer_assigns_applicant_through_service_modal_to_lightest_counter(): void
+    {
+        Role::firstOrCreate(['name' => 'officer']);
+        $customerRole = Role::firstOrCreate(['name' => 'Pelanggan/Penanya']);
+
+        $officer = User::factory()->create([
+            'email' => 'assign-modal-officer@example.test',
+            'password' => 'password123',
+        ]);
+        $officer->assignRole('officer');
+
+        $runtime = app(QueueRuntimeService::class);
+        $session = $runtime->currentSession();
+
+        $service = QueueService::create([
+            'name' => 'Layanan Modal',
+            'slug' => 'layanan-modal',
+            'code' => 'LM',
+            'sort_order' => 1,
+            'is_active' => true,
+        ]);
+
+        $busyCounter = ServiceCounter::create([
+            'queue_service_id' => $service->id,
+            'assigned_user_id' => $officer->id,
+            'name' => 'Loket Modal Ramai',
+            'code' => 'LM-1',
+            'sort_order' => 1,
+            'is_active' => true,
+        ]);
+
+        $lightCounter = ServiceCounter::create([
+            'queue_service_id' => $service->id,
+            'name' => 'Loket Modal Ringan',
+            'code' => 'LM-2',
+            'sort_order' => 2,
+            'is_active' => true,
+        ]);
+
+        ServiceDailyQuota::create([
+            'queue_session_id' => $session->id,
+            'queue_service_id' => $service->id,
+            'max_daily_quota' => 20,
+            'is_open' => true,
+        ]);
+
+        $existingUser = User::factory()->create(['email' => 'assign-modal-existing@example.test']);
+        $existingApplicant = Applicant::create([
+            'user_id' => $existingUser->id,
+            'full_name' => 'Pendaftar Modal Existing',
+            'school_origin' => 'SMP Modal',
+            'nisn' => '7711223301',
+            'whatsapp' => '087711223301',
+            'status' => 'registered',
+        ]);
+
+        QueueTicket::create([
+            'applicant_id' => $existingApplicant->id,
+            'queue_session_id' => $session->id,
+            'queue_service_id' => $service->id,
+            'service_counter_id' => $busyCounter->id,
+            'queue_date' => $session->session_date,
+            'queue_number' => 1,
+            'call_sequence' => 1000,
+            'ticket_code' => 'LM-001',
+            'status' => QueueTicket::STATUS_WAITING,
+            'assigned_at' => now()->subMinutes(10),
+        ]);
+
+        $user = User::factory()->create(['email' => 'assign-modal-applicant@example.test']);
+        $user->assignRole($customerRole);
+        $applicant = Applicant::create([
+            'user_id' => $user->id,
+            'full_name' => 'Pendaftar Modal Baru',
+            'school_origin' => 'SMP Modal',
+            'nisn' => '7711223302',
+            'whatsapp' => '087711223302',
+            'status' => 'registered',
+        ]);
+
+        $runtime->confirmPresenceByOfficer($applicant, $officer);
+
+        Livewire::actingAs($officer)
+            ->test(OfficerQueueConsole::class)
+            ->call('openAssignServiceModal', $applicant->id)
+            ->assertSet('assigningApplicantId', $applicant->id)
+            ->assertSee('Masukkan ke Layanan')
+            ->assertSee('Layanan Modal - Kuota 1 / 20')
+            ->assertDontSee('rekomendasi')
+            ->set('assigningServiceId', $service->id)
+            ->assertSee('Sistem akan memilih loket yang buka dengan beban paling ringan')
+            ->call('confirmAssignApplicantToService')
+            ->assertHasNoErrors()
+            ->assertSet('assigningApplicantId', null);
+
+        $this->assertDatabaseHas('queue_tickets', [
+            'applicant_id' => $applicant->id,
+            'queue_service_id' => $service->id,
+            'service_counter_id' => $lightCounter->id,
+            'status' => QueueTicket::STATUS_WAITING,
+        ]);
+    }
+
     public function test_officer_can_only_call_first_waiting_ticket_and_transfer_uses_modal_target(): void
     {
         Role::firstOrCreate(['name' => 'officer']);
@@ -433,6 +621,56 @@ class QueuePagesTest extends TestCase
         $response->assertDontSee('class="bottom-nav"', false);
     }
 
+    public function test_queue_qr_generation_requires_manual_officer_permission(): void
+    {
+        Permission::firstOrCreate(['name' => 'petugas.konsol_antrian']);
+        $permission = Permission::firstOrCreate(['name' => 'petugas.kelola_qr_antrian']);
+        $officerRole = Role::firstOrCreate(['name' => 'Petugas']);
+        $officerRole->givePermissionTo('petugas.konsol_antrian');
+
+        $officer = User::factory()->create([
+            'email' => 'qr-limited-officer@example.test',
+            'password' => 'password123',
+        ]);
+        $officer->assignRole($officerRole);
+
+        $service = QueueService::create([
+            'name' => 'Layanan QR Terbatas',
+            'slug' => 'layanan-qr-terbatas',
+            'code' => 'LQT',
+            'sort_order' => 1,
+            'is_active' => true,
+        ]);
+
+        ServiceCounter::create([
+            'queue_service_id' => $service->id,
+            'assigned_user_id' => $officer->id,
+            'name' => 'Loket QR Terbatas',
+            'code' => 'LQT-1',
+            'sort_order' => 1,
+            'is_active' => true,
+        ]);
+
+        Livewire::actingAs($officer)
+            ->test(OfficerQueueConsole::class)
+            ->assertDontSee('Buat/Ganti QR & Kode', false)
+            ->call('generateCheckInQr')
+            ->assertHasErrors(['selectedCounterId']);
+
+        $this->assertDatabaseCount('queue_session_qr_codes', 0);
+
+        $officer->givePermissionTo($permission);
+
+        $component = Livewire::actingAs($officer->fresh())
+            ->test(OfficerQueueConsole::class)
+            ->assertSee('Buat/Ganti QR & Kode', false)
+            ->call('generateCheckInQr')
+            ->assertHasNoErrors();
+
+        $this->assertNotEmpty($component->get('generatedCheckInCode'));
+        $this->assertDatabaseCount('queue_session_qr_codes', 1);
+    }
+
     public function test_admin_route_is_removed(): void
     {
         $response = $this->get('/admin');
@@ -450,6 +688,7 @@ class QueuePagesTest extends TestCase
         $this->assertTrue($superAdmin->is_active);
         $this->assertTrue($superAdmin->hasRole('Super Admin'));
         $this->assertTrue($superAdmin->can('petugas.konsol_antrian'));
+        $this->assertTrue($superAdmin->can('petugas.kelola_qr_antrian'));
         $this->assertTrue($superAdmin->can('admin.pengaturan_aplikasi'));
         $this->assertTrue($superAdmin->can('admin.manajemen_layanan'));
         $this->assertTrue($superAdmin->can('admin.manajemen_user'));
@@ -466,6 +705,7 @@ class QueuePagesTest extends TestCase
         $this->assertDatabaseHas('permissions', ['name' => 'admin.login_sebagai_user']);
         $this->assertDatabaseHas('permissions', ['name' => 'petugas.beranda']);
         $this->assertDatabaseHas('permissions', ['name' => 'petugas.konsol_antrian']);
+        $this->assertDatabaseHas('permissions', ['name' => 'petugas.kelola_qr_antrian']);
         $this->assertDatabaseHas('permissions', ['name' => 'pelanggan.beranda']);
         $this->assertDatabaseHas('permissions', ['name' => 'pelanggan.dashboard_antrian']);
         $this->assertDatabaseHas('permissions', ['name' => 'pelanggan.status_antrian']);
@@ -486,8 +726,11 @@ class QueuePagesTest extends TestCase
         $this->assertSame('ASA-Tertib', AppSetting::getValue('app.name'));
         $this->assertDatabaseHas('app_settings', ['key' => 'app.favicon']);
         $this->assertSame('Asia/Jakarta', AppSetting::getValue('app.timezone'));
+        $this->assertTrue(AppSetting::getValue('queue.daily_quota_enabled'));
+        $this->assertSame(200, AppSetting::getValue('queue.daily_quota_limit'));
 
         $this->assertTrue(Role::findByName('Petugas')->hasPermissionTo('petugas.konsol_antrian'));
+        $this->assertFalse(Role::findByName('Petugas')->hasPermissionTo('petugas.kelola_qr_antrian'));
         $this->assertFalse(Role::findByName('Petugas')->hasPermissionTo('admin.pengaturan_aplikasi'));
         $this->assertFalse(Role::findByName('Petugas')->hasPermissionTo('admin.manajemen_layanan'));
         $this->assertFalse(Role::findByName('Petugas')->hasPermissionTo('admin.manajemen_user'));
@@ -498,8 +741,20 @@ class QueuePagesTest extends TestCase
         $this->assertTrue(Role::findByName('Pelanggan/Penanya')->hasPermissionTo('pelanggan.status_antrian'));
         $this->assertSame(10, AppSetting::getValue('queue.default_service_minutes'));
 
+        AppSetting::putValue('queue.daily_quota_limit', 123, [
+            'group' => 'queue',
+            'label' => 'Total Quota Harian',
+            'type' => AppSetting::TYPE_INTEGER,
+            'is_public' => false,
+            'sort_order' => 3,
+        ]);
+
         Role::firstOrCreate(['name' => 'applicant']);
         $this->seed();
+        $this->assertSame(123, AppSetting::getValue('queue.daily_quota_limit'));
+        config(['seed.sync_mode' => 'sync']);
+        $this->seed();
+        $this->assertSame(200, AppSetting::getValue('queue.daily_quota_limit'));
         $this->assertTrue(Role::findByName('applicant')->hasPermissionTo('pelanggan.status_antrian'));
         $this->assertTrue(Role::findByName('applicant')->hasPermissionTo('pelanggan.dashboard_antrian'));
 
@@ -544,6 +799,8 @@ class QueuePagesTest extends TestCase
         $response->assertSee('Nama Aplikasi');
         $response->assertSee('Tampilkan Logo');
         $response->assertSee('Ikon Browser');
+        $response->assertSee('Aktifkan Quota Harian');
+        $response->assertSee('Total Quota Harian');
         $response->assertDontSee('app.name');
         $response->assertDontSee('<table>', false);
 
@@ -895,6 +1152,8 @@ class QueuePagesTest extends TestCase
             ->set('primaryColor', '#123abc')
             ->set('appTimezone', 'Asia/Makassar')
             ->set('defaultServiceMinutes', 12)
+            ->set('dailyQuotaEnabled', true)
+            ->set('dailyQuotaLimit', 150)
             ->call('save')
             ->assertHasNoErrors();
 
@@ -907,6 +1166,12 @@ class QueuePagesTest extends TestCase
         $this->assertSame('#123abc', AppSetting::getValue('app.primary_color'));
         $this->assertSame('Asia/Makassar', AppSetting::getValue('app.timezone'));
         $this->assertSame(12, AppSetting::getValue('queue.default_service_minutes'));
+        $this->assertTrue(AppSetting::getValue('queue.daily_quota_enabled'));
+        $this->assertSame(150, AppSetting::getValue('queue.daily_quota_limit'));
+
+        $this->assertDatabaseHas('service_daily_quotas', [
+            'max_daily_quota' => 150,
+        ]);
     }
 
     public function test_applicant_dashboard_estimate_uses_default_then_average_completed_service_time(): void
@@ -1610,6 +1875,98 @@ class QueuePagesTest extends TestCase
         ]);
     }
 
+    public function test_disabled_daily_quota_allows_queue_even_when_service_quota_record_is_full(): void
+    {
+        AppSetting::putValue('queue.daily_quota_enabled', false, [
+            'group' => 'queue',
+            'label' => 'Aktifkan Quota Harian',
+            'type' => AppSetting::TYPE_BOOLEAN,
+            'is_public' => false,
+            'sort_order' => 2,
+        ]);
+
+        $officer = User::factory()->create([
+            'email' => 'quota-disabled-officer@example.test',
+            'password' => 'password123',
+        ]);
+
+        $runtime = app(QueueRuntimeService::class);
+        $session = $runtime->currentSession();
+
+        $service = QueueService::create([
+            'name' => 'Layanan Quota Nonaktif',
+            'slug' => 'layanan-quota-nonaktif',
+            'code' => 'LQN',
+            'sort_order' => 1,
+            'is_active' => true,
+        ]);
+
+        $counter = ServiceCounter::create([
+            'queue_service_id' => $service->id,
+            'assigned_user_id' => $officer->id,
+            'name' => 'Loket Quota Nonaktif',
+            'code' => 'LQN-1',
+            'sort_order' => 1,
+            'is_active' => true,
+        ]);
+
+        ServiceDailyQuota::create([
+            'queue_session_id' => $session->id,
+            'queue_service_id' => $service->id,
+            'max_daily_quota' => 1,
+            'is_open' => true,
+        ]);
+
+        $existingUser = User::factory()->create(['email' => 'quota-disabled-existing@example.test']);
+        $existingApplicant = Applicant::create([
+            'user_id' => $existingUser->id,
+            'full_name' => 'Pendaftar Quota Existing',
+            'school_origin' => 'SMP Quota',
+            'nisn' => '7777888899',
+            'whatsapp' => '087777888899',
+            'status' => 'registered',
+        ]);
+
+        QueueTicket::create([
+            'applicant_id' => $existingApplicant->id,
+            'queue_session_id' => $session->id,
+            'queue_service_id' => $service->id,
+            'service_counter_id' => $counter->id,
+            'queue_date' => today(),
+            'queue_number' => 1,
+            'call_sequence' => 1000,
+            'ticket_code' => 'LQN-001',
+            'status' => QueueTicket::STATUS_COMPLETED,
+            'assigned_at' => now(),
+            'completed_at' => now(),
+        ]);
+
+        $user = User::factory()->create(['email' => 'quota-disabled-applicant@example.test']);
+        $applicant = Applicant::create([
+            'user_id' => $user->id,
+            'full_name' => 'Pendaftar Quota Nonaktif',
+            'school_origin' => 'SMP Quota',
+            'nisn' => '8888999900',
+            'whatsapp' => '088888999900',
+            'status' => 'registered',
+        ]);
+
+        $runtime->confirmPresenceByOfficer($applicant, $officer);
+
+        $quotaStatus = $runtime->quotaStatus($service, $session);
+
+        $this->assertNull($quotaStatus['max']);
+        $this->assertFalse($quotaStatus['is_full']);
+
+        $runtime->createTicket($applicant, $service, $counter, $officer, null, null, $session);
+
+        $this->assertDatabaseHas('queue_tickets', [
+            'applicant_id' => $applicant->id,
+            'queue_service_id' => $service->id,
+            'service_counter_id' => $counter->id,
+        ]);
+    }
+
     public function test_counter_allocation_recommends_under_target_counter(): void
     {
         Role::firstOrCreate(['name' => 'officer']);
@@ -1649,10 +2006,19 @@ class QueuePagesTest extends TestCase
             'is_active' => true,
         ]);
 
+        $counterClosed = ServiceCounter::create([
+            'queue_service_id' => $service->id,
+            'assigned_user_id' => null,
+            'name' => 'Loket Alokasi Tutup',
+            'code' => 'AL-3',
+            'sort_order' => 3,
+            'is_active' => false,
+        ]);
+
         ServiceDailyQuota::create([
             'queue_session_id' => $session->id,
             'queue_service_id' => $service->id,
-            'max_daily_quota' => 2,
+            'max_daily_quota' => 3,
             'is_open' => true,
         ]);
 
@@ -1703,6 +2069,14 @@ class QueuePagesTest extends TestCase
             'queue_service_id' => $service->id,
             'service_counter_id' => $counterTwo->id,
         ]);
+
+        foreach ([$counterOne, $counterTwo, $counterClosed] as $counter) {
+            $this->assertDatabaseHas('counter_daily_allocations', [
+                'queue_session_id' => $session->id,
+                'service_counter_id' => $counter->id,
+                'target_quota' => 1,
+            ]);
+        }
     }
 
     private function waitingTicketIds(ServiceCounter $counter): array

@@ -505,10 +505,16 @@
                             Download QR
                         </a>
                     @endif
-                    <button type="button" class="btn btn-primary btn-small" wire:click="generateCheckInQr">
-                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h3v3h-3zM18 18h3v3h-3zM18 14h3"/></svg>
-                        Buat/Ganti QR & Kode
-                    </button>
+                    @if($canManageQueueQr)
+                        <button type="button" class="btn btn-primary btn-small" wire:click="generateCheckInQr">
+                            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h3v3h-3zM18 18h3v3h-3zM18 14h3"/></svg>
+                            Buat/Ganti QR & Kode
+                        </button>
+                    @else
+                        <div class="muted" style="max-width: 220px; text-align: right;">
+                            Hanya petugas tertentu yang dapat membuat atau mengganti QR & kode.
+                        </div>
+                    @endif
                 </div>
             </div>
 
@@ -605,9 +611,10 @@
             </div>
 
             @if(! $selectedCounter->is_active)
-                <div class="alert alert-danger">Loket sedang ditutup. Buka loket terlebih dahulu sebelum memasukkan pendaftar baru.</div>
-            @else
-                <div class="applicant-directory">
+                <div class="alert">Loket yang sedang dipilih ditutup. Pendaftar tetap dapat diarahkan ke layanan lain yang memiliki loket buka.</div>
+            @endif
+
+            <div class="applicant-directory">
                     <div class="quick-search-panel">
                         <div class="quick-search-head">
                             <strong>Pencarian Cepat</strong>
@@ -669,7 +676,7 @@
                                         </button>
                                     @endif
                                     @if(! $activeQueueTicket)
-                                        <button type="button" class="btn btn-primary btn-small" wire:click="assignToSelectedCounter({{ $applicant->id }})">
+                                        <button type="button" class="btn btn-primary btn-small" wire:click="openAssignServiceModal({{ $applicant->id }})">
                                             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
                                             Masukkan
                                         </button>
@@ -690,8 +697,7 @@
                             <div class="scroll-status">Semua data sudah ditampilkan.</div>
                         @endif
                     </div>
-                </div>
-            @endif
+            </div>
         </section>
 
         <section class="panel stack section-noshow">
@@ -732,6 +738,71 @@
                 </div>
             @endif
         </section>
+
+        @if($assigningApplicant)
+            <div class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="assignServiceTitle" wire:key="assign-service-modal-{{ $assigningApplicant->id }}">
+                <div class="transfer-modal">
+                    <div class="transfer-modal-head">
+                        <div>
+                            <strong id="assignServiceTitle">Masukkan ke Layanan</strong>
+                            <div class="muted">
+                                {{ $assigningApplicant->full_name }} - {{ $assigningApplicant->nisn ?: 'NISN belum tersedia' }}
+                            </div>
+                        </div>
+                        <button type="button" class="btn btn-outline btn-small" wire:click="closeAssignServiceModal">
+                            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18"/><path d="M6 6l12 12"/></svg>
+                            Tutup
+                        </button>
+                    </div>
+
+                    <div class="field">
+                        <label for="assigningServiceId">Pilih Layanan</label>
+                        <select id="assigningServiceId" class="select" wire:model.live="assigningServiceId">
+                            <option value="">Pilih layanan yang akan diambil</option>
+                            @foreach($assignmentServices as $service)
+                                @php($status = $assignmentServiceStatuses->get($service->id))
+                                @php($quota = $status['quota'] ?? null)
+                                <option value="{{ $service->id }}" @disabled(! ($status['can_queue'] ?? false))>
+                                    {{ $service->name }}{{ ($quota['is_enabled'] ?? false) ? ' - Kuota ' . ($quota['label'] ?? 'Tanpa batas') : '' }}{{ ! ($status['can_queue'] ?? false) ? ' - ' . ($status['unavailable_message'] ?? 'Tidak tersedia') : '' }}
+                                </option>
+                            @endforeach
+                        </select>
+                        @error('assigningServiceId') <span class="error">{{ $message }}</span> @enderror
+                    </div>
+
+                    @if($assigningServiceId)
+                        @php($selectedAssignmentStatus = $assignmentServiceStatuses->get((int) $assigningServiceId))
+                        <div class="scroll-status" style="text-align: left;">
+                            @if($selectedAssignmentStatus['can_queue'] ?? false)
+                                Sistem akan memilih loket yang buka dengan beban paling ringan saat pendaftar dimasukkan.
+                            @else
+                                {{ $selectedAssignmentStatus['unavailable_message'] ?? 'Layanan belum dapat diambil.' }}
+                            @endif
+                        </div>
+                    @else
+                        <div class="scroll-status" style="text-align: left;">
+                            Pilih layanan terlebih dahulu. Sistem akan mencari loket yang buka dengan jumlah antrian/pengunjung paling ringan.
+                        </div>
+                    @endif
+
+                    <div class="field">
+                        <label for="assignNotes">Catatan</label>
+                        <input id="assignNotes" class="input" type="text" wire:model="notes" placeholder="Opsional">
+                    </div>
+
+                    <div class="button-row" style="justify-content: flex-end;">
+                        <button type="button" class="btn btn-outline" wire:click="closeAssignServiceModal">
+                            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18"/><path d="M6 6l12 12"/></svg>
+                            Batal
+                        </button>
+                        <button type="button" class="btn btn-primary" wire:click="confirmAssignApplicantToService">
+                            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
+                            Masukkan
+                        </button>
+                    </div>
+                </div>
+            </div>
+        @endif
 
         @if($transferTicket)
             <div class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="transferTicketTitle" wire:key="transfer-ticket-modal">
