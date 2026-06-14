@@ -114,6 +114,7 @@ class QueuePagesTest extends TestCase
     public function test_officer_applicant_direction_list_uses_mobile_cards_and_lazy_batches(): void
     {
         Role::firstOrCreate(['name' => 'officer']);
+        $customerRole = Role::firstOrCreate(['name' => 'Pelanggan/Penanya']);
 
         $officer = User::factory()->create([
             'email' => 'mobile-list-officer@example.test',
@@ -143,6 +144,7 @@ class QueuePagesTest extends TestCase
                 'email' => sprintf('mobile-list-applicant-%02d@example.test', $number),
                 'password' => 'password123',
             ]);
+            $user->assignRole($customerRole);
 
             Applicant::create([
                 'user_id' => $user->id,
@@ -170,6 +172,236 @@ class QueuePagesTest extends TestCase
             ->assertSet('visibleApplicantCount', 5)
             ->assertSee('Pendaftar Mobile 07')
             ->assertDontSee('Pendaftar Mobile 01');
+    }
+
+    public function test_officer_direction_list_filters_customer_roles_and_places_active_queue_after_waiting_applicants(): void
+    {
+        Role::firstOrCreate(['name' => 'officer']);
+        $customerRole = Role::firstOrCreate(['name' => 'Pelanggan/Penanya']);
+
+        $officer = User::factory()->create([
+            'email' => 'direction-order-officer@example.test',
+            'password' => 'password123',
+        ]);
+        $officer->assignRole('officer');
+
+        $service = QueueService::create([
+            'name' => 'Layanan Urutan',
+            'slug' => 'layanan-urutan',
+            'code' => 'LU',
+            'sort_order' => 1,
+            'is_active' => true,
+        ]);
+
+        $counter = ServiceCounter::create([
+            'queue_service_id' => $service->id,
+            'assigned_user_id' => $officer->id,
+            'name' => 'Loket Urutan',
+            'code' => 'LU-1',
+            'sort_order' => 1,
+            'is_active' => true,
+        ]);
+
+        $session = app(QueueRuntimeService::class)->currentSession();
+
+        $queuedUser = User::factory()->create([
+            'email' => 'sudah-antri@example.test',
+            'password' => 'password123',
+        ]);
+        $queuedUser->assignRole($customerRole);
+        $queuedApplicant = Applicant::create([
+            'user_id' => $queuedUser->id,
+            'full_name' => 'Pendaftar Sudah Antri',
+            'school_origin' => 'SMP Urutan',
+            'nisn' => '7711000001',
+            'whatsapp' => '087711000001',
+            'status' => 'registered',
+            'created_at' => now()->subMinutes(20),
+            'updated_at' => now()->subMinutes(20),
+        ]);
+
+        AttendanceCheckin::create([
+            'queue_session_id' => $session->id,
+            'applicant_id' => $queuedApplicant->id,
+            'presence_status' => AttendanceCheckin::STATUS_CHECKED_IN,
+            'presence_confirmed_at' => today()->setTime(8, 0),
+            'presence_method' => AttendanceCheckin::METHOD_OFFICER,
+            'presence_location_code' => today()->toDateString(),
+        ]);
+
+        QueueTicket::create([
+            'applicant_id' => $queuedApplicant->id,
+            'queue_session_id' => $session->id,
+            'queue_service_id' => $service->id,
+            'service_counter_id' => $counter->id,
+            'queue_date' => $session->session_date,
+            'queue_number' => 1,
+            'call_sequence' => 1000,
+            'ticket_code' => 'LU-001',
+            'status' => QueueTicket::STATUS_WAITING,
+            'assigned_at' => now()->subMinutes(10),
+        ]);
+
+        $waitingUser = User::factory()->create([
+            'email' => 'belum-antri@example.test',
+            'password' => 'password123',
+        ]);
+        $waitingUser->assignRole($customerRole);
+        $waitingApplicant = Applicant::create([
+            'user_id' => $waitingUser->id,
+            'full_name' => 'Pendaftar Belum Antri',
+            'school_origin' => 'SMP Urutan',
+            'nisn' => '7711000002',
+            'whatsapp' => '087711000002',
+            'status' => 'registered',
+            'created_at' => now()->subMinutes(10),
+            'updated_at' => now()->subMinutes(10),
+        ]);
+
+        AttendanceCheckin::create([
+            'queue_session_id' => $session->id,
+            'applicant_id' => $waitingApplicant->id,
+            'presence_status' => AttendanceCheckin::STATUS_CHECKED_IN,
+            'presence_confirmed_at' => today()->setTime(8, 30),
+            'presence_method' => AttendanceCheckin::METHOD_OFFICER,
+            'presence_location_code' => today()->toDateString(),
+        ]);
+
+        $nonCustomerUser = User::factory()->create([
+            'email' => 'bukan-pelanggan@example.test',
+            'password' => 'password123',
+        ]);
+        Applicant::create([
+            'user_id' => $nonCustomerUser->id,
+            'full_name' => 'Bukan Pelanggan',
+            'school_origin' => 'SMP Urutan',
+            'nisn' => '7711000003',
+            'whatsapp' => '087711000003',
+            'status' => 'registered',
+            'created_at' => now()->subMinutes(5),
+            'updated_at' => now()->subMinutes(5),
+        ]);
+
+        $component = Livewire::actingAs($officer)->test(OfficerQueueConsole::class);
+        $applicants = $component->viewData('applicants');
+
+        $this->assertSame([
+            'Pendaftar Belum Antri',
+            'Pendaftar Sudah Antri',
+        ], $applicants->pluck('full_name')->all());
+
+        $component
+            ->assertSee('Sedang antri di Loket Urutan')
+            ->assertSee('Tombol Masukkan disembunyikan')
+            ->assertDontSee('Bukan Pelanggan');
+    }
+
+    public function test_officer_can_only_call_first_waiting_ticket_and_transfer_uses_modal_target(): void
+    {
+        Role::firstOrCreate(['name' => 'officer']);
+
+        $officer = User::factory()->create([
+            'email' => 'call-transfer-officer@example.test',
+            'password' => 'password123',
+        ]);
+        $officer->assignRole('officer');
+
+        $service = QueueService::create([
+            'name' => 'Layanan Panggil',
+            'slug' => 'layanan-panggil',
+            'code' => 'LP',
+            'sort_order' => 1,
+            'is_active' => true,
+        ]);
+
+        $counterOne = ServiceCounter::create([
+            'queue_service_id' => $service->id,
+            'assigned_user_id' => $officer->id,
+            'name' => 'Loket Panggil 1',
+            'code' => 'LP-1',
+            'sort_order' => 1,
+            'is_active' => true,
+        ]);
+
+        $counterTwo = ServiceCounter::create([
+            'queue_service_id' => $service->id,
+            'name' => 'Loket Panggil 2',
+            'code' => 'LP-2',
+            'sort_order' => 2,
+            'is_active' => true,
+        ]);
+
+        $session = app(QueueRuntimeService::class)->currentSession();
+
+        $tickets = collect(range(1, 2))->map(function (int $number) use ($service, $counterOne, $session): QueueTicket {
+            $user = User::factory()->create([
+                'email' => "call-transfer-applicant-{$number}@example.test",
+                'password' => 'password123',
+            ]);
+
+            $applicant = Applicant::create([
+                'user_id' => $user->id,
+                'full_name' => "Pendaftar Panggil {$number}",
+                'school_origin' => 'SMP Panggil',
+                'nisn' => '882200000' . $number,
+                'whatsapp' => '08882200000' . $number,
+                'status' => 'registered',
+            ]);
+
+            AttendanceCheckin::create([
+                'queue_session_id' => $session->id,
+                'applicant_id' => $applicant->id,
+                'presence_status' => AttendanceCheckin::STATUS_CHECKED_IN,
+                'presence_confirmed_at' => today()->setTime(9, $number),
+                'presence_method' => AttendanceCheckin::METHOD_OFFICER,
+                'presence_location_code' => today()->toDateString(),
+            ]);
+
+            return QueueTicket::create([
+                'applicant_id' => $applicant->id,
+                'queue_session_id' => $session->id,
+                'queue_service_id' => $service->id,
+                'service_counter_id' => $counterOne->id,
+                'queue_date' => $session->session_date,
+                'queue_number' => $number,
+                'call_sequence' => $number * 1000,
+                'ticket_code' => 'LP-' . str_pad((string) $number, 3, '0', STR_PAD_LEFT),
+                'status' => QueueTicket::STATUS_WAITING,
+                'assigned_at' => now()->addMinutes($number),
+            ]);
+        })->values();
+
+        Livewire::actingAs($officer)
+            ->test(OfficerQueueConsole::class)
+            ->call('callTicket', $tickets[1]->id)
+            ->assertHasErrors(['notes']);
+
+        $this->assertSame(QueueTicket::STATUS_WAITING, $tickets[1]->refresh()->status);
+
+        Livewire::actingAs($officer)
+            ->test(OfficerQueueConsole::class)
+            ->call('callTicket', $tickets[0]->id)
+            ->assertHasNoErrors();
+
+        $this->assertSame(QueueTicket::STATUS_CALLED, $tickets[0]->refresh()->status);
+
+        Livewire::actingAs($officer)
+            ->test(OfficerQueueConsole::class)
+            ->call('openTransferModal', $tickets[1]->id)
+            ->assertSet('transferTicketId', $tickets[1]->id)
+            ->assertSee('Pindah Loket')
+            ->set('transferTargetCounterId', $counterOne->id)
+            ->call('confirmTransferTicket')
+            ->assertHasErrors(['transferTargetCounterId'])
+            ->set('transferTargetCounterId', $counterTwo->id)
+            ->call('confirmTransferTicket')
+            ->assertHasNoErrors();
+
+        $this->assertDatabaseHas('queue_tickets', [
+            'applicant_id' => $tickets[1]->applicant_id,
+            'service_counter_id' => $counterTwo->id,
+            'status' => QueueTicket::STATUS_WAITING,
+        ]);
     }
 
     public function test_officer_can_print_active_queue_qr_code(): void

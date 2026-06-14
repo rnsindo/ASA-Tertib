@@ -184,7 +184,7 @@ Dashboard `/petugas` dibuat berbasis tugas loket:
 
 - Petugas biasa hanya melihat loket yang `assigned_user_id`-nya sesuai dengan akun petugas tersebut.
 - Super Admin/admin tetap dapat melihat semua loket untuk kebutuhan supervisi.
-- Halaman awal menampilkan data petugas, daftar loket tugas, status loket `Buka`/`Tutup`, dan ringkasan antrian `Menunggu`, `Dipanggil`, serta `Berlangsung`.
+- Halaman awal menampilkan data petugas, daftar loket tugas, status loket `Buka`/`Tutup`, dan ringkasan antrian `Menunggu`, `Selesai`, serta `Tidak di Tempat`.
 - Petugas dapat membuka atau menutup loket tugasnya dari tombol `Buka Loket`/`Tutup Loket`.
 - Jika loket ditutup, petugas masih dapat melihat antrian aktif, tetapi tidak dapat memasukkan pendaftar baru sampai loket dibuka kembali.
 - Jika petugas belum ditugaskan ke loket tertentu, dashboard menampilkan kondisi kosong yang meminta petugas menghubungi Super Admin agar ditugaskan melalui Manajemen Layanan.
@@ -313,6 +313,16 @@ Data master layanan tidak lagi hanya bergantung pada seeder. Seeder tetap menyed
 
 ## Dashboard petugas
 
-Halaman `/petugas` menampilkan data petugas, loket yang menjadi tugasnya, status buka/tutup loket, ringkasan antrian aktif, QR/kode ambil antrian, dan daftar pendaftar yang bisa diarahkan ke loket.
+Halaman `/petugas` menampilkan data petugas, loket yang menjadi tugasnya, status buka/tutup loket, ringkasan antrian aktif, QR/kode ambil antrian, antrian loket aktif, dan daftar pendaftar yang bisa diarahkan ke loket.
 
-Bagian `Arahkan Pendaftar ke Loket` memakai card mobile, bukan tabel, agar nyaman dibuka melalui HP. Daftar pendaftar dibatasi pada data yang masuk hari tersebut, termasuk pendaftar lama yang sudah check-in atau sudah punya tiket pada sesi berjalan. Sistem hanya memuat 5 data paling awal terlebih dahulu, lalu memuat 5 data berikutnya ketika petugas scroll sampai bagian bawah section daftar. Pencarian cepat berdasarkan nama, NISN, WhatsApp, sekolah, atau email akan mereset batch ke 5 data pertama dari hasil filter.
+Bagian ringkasan dashboard petugas memakai tiga indikator icon: `Menunggu`, `Selesai`, dan `Tidak di Tempat`. Masing-masing icon memiliki tooltip saat ditekan/focus.
+
+Bagian `Antrian Loket Ini` ditempatkan langsung setelah ringkasan dashboard petugas. Data ditampilkan sebagai card mobile, bukan tabel, agar mudah dioperasikan dari HP. Tombol `Panggil` hanya muncul untuk tiket berstatus `Antrian` dengan urutan menunggu paling awal pada loket tersebut. Tombol `Pindah` membuka modal pemilihan loket tujuan; loket tempat pendaftar sedang antri tetap ditampilkan sebagai konteks tetapi tidak bisa dipilih sebagai tujuan.
+
+Bagian `Arahkan Pendaftar ke Loket` memakai card mobile dan scroll internal. Daftar hanya menampilkan akun yang memiliki role pelanggan/pendaftar, yaitu role `Pelanggan/Penanya` beserta alias kompatibilitas lama seperti `Pengguna` dan `applicant`. Data dibatasi pada pendaftar hari tersebut, termasuk pendaftar lama yang sudah check-in atau sudah punya tiket pada sesi berjalan. Urutan daftar mendahulukan pendaftar yang belum/sedang tidak berada dalam antrian aktif, lalu pendaftar yang sudah antri ditempatkan setelahnya. Di dalam masing-masing grup, data diurutkan berdasarkan waktu `attendance_checkins.presence_confirmed_at` paling awal pada sesi hari ini.
+
+Jika pendaftar sudah atau sedang masuk antrian pada loket mana pun, tombol `Masukkan` disembunyikan dan card menampilkan informasi loket aktifnya. Sistem hanya memuat 5 data pertama terlebih dahulu, lalu memuat 5 data berikutnya ketika petugas scroll sampai bagian bawah section daftar. Pencarian cepat berdasarkan nama, NISN, WhatsApp, sekolah, atau email akan mereset batch ke 5 data pertama dari hasil filter.
+
+Bagian `Tidak di Tempat Hari Ini` juga memakai card mobile. Setiap card menampilkan nama pendaftar, nomor tiket, layanan, NISN, waktu terakhir ditandai tidak di tempat, jumlah terlewat, catatan jika ada, dan tombol `Masukkan Ulang`.
+
+Halaman `/petugas/loket-lain` menjadi halaman khusus `Daftar Loket Lain`. Menu nav bawah petugas berlabel `Loket` mengarah ke halaman ini. Data ditampilkan sebagai card per loket dengan ringkasan `Menunggu`, `Selesai`, dan `Tidak di Tempat` untuk tanggal berjalan.

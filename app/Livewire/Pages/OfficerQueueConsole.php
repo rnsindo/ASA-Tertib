@@ -22,9 +22,16 @@ class OfficerQueueConsole extends Component
     private const CALL_SEQUENCE_STEP = 1000;
     private const REQUEUE_AFTER_WAITING_COUNT = 2;
     private const APPLICANT_BATCH_SIZE = 5;
+    private const APPLICANT_ROLE_NAMES = ['Pelanggan/Penanya', 'Pengguna', 'applicant', 'Pendaftar', 'Pelanggan'];
+    private const ACTIVE_QUEUE_STATUSES = [
+        QueueTicket::STATUS_WAITING,
+        QueueTicket::STATUS_CALLED,
+        QueueTicket::STATUS_IN_PROGRESS,
+    ];
 
     public ?int $selectedCounterId = null;
     public ?int $transferTargetCounterId = null;
+    public ?int $transferTicketId = null;
     public string $search = '';
     public int $visibleApplicantCount = self::APPLICANT_BATCH_SIZE;
     public string $notes = '';
@@ -60,11 +67,17 @@ class OfficerQueueConsole extends Component
 
         $this->selectedCounterId = $counterId;
         $this->transferTargetCounterId = null;
+        $this->transferTicketId = null;
     }
 
     public function updatedSearch(): void
     {
         $this->visibleApplicantCount = self::APPLICANT_BATCH_SIZE;
+    }
+
+    public function updatedTransferTargetCounterId(): void
+    {
+        $this->resetErrorBag('transferTargetCounterId');
     }
 
     public function loadMoreApplicants(): void
@@ -139,8 +152,22 @@ class OfficerQueueConsole extends Component
 
     public function callTicket(int $ticketId): void
     {
-        $ticket = QueueTicket::findOrFail($ticketId);
+        $ticket = QueueTicket::with('counter')->findOrFail($ticketId);
         $this->authorizeTicketCounter($ticket);
+
+        if ($ticket->status !== QueueTicket::STATUS_WAITING || ! $ticket->counter) {
+            $this->addError('notes', 'Hanya tiket yang masih menunggu yang bisa dipanggil.');
+
+            return;
+        }
+
+        $firstWaitingTicketId = $this->waitingTicketsForCounter($ticket->counter)->value('id');
+
+        if ((int) $firstWaitingTicketId !== (int) $ticket->id) {
+            $this->addError('notes', 'Tombol panggil hanya berlaku untuk antrian paling awal pada loket ini.');
+
+            return;
+        }
 
         $ticket->update([
             'status' => QueueTicket::STATUS_CALLED,
@@ -229,6 +256,33 @@ class OfficerQueueConsole extends Component
         });
     }
 
+    public function openTransferModal(int $ticketId): void
+    {
+        $ticket = QueueTicket::findOrFail($ticketId);
+        $this->authorizeTicketCounter($ticket);
+
+        $this->transferTicketId = $ticket->id;
+        $this->transferTargetCounterId = null;
+        $this->resetErrorBag('transferTargetCounterId');
+    }
+
+    public function closeTransferModal(): void
+    {
+        $this->transferTicketId = null;
+        $this->transferTargetCounterId = null;
+    }
+
+    public function confirmTransferTicket(): void
+    {
+        if (! $this->transferTicketId) {
+            $this->addError('transferTargetCounterId', 'Pilih tiket yang akan dipindahkan.');
+
+            return;
+        }
+
+        $this->transferTicket($this->transferTicketId);
+    }
+
     public function transferTicket(int $ticketId): void
     {
         $targetCounter = ServiceCounter::with('service')->find($this->transferTargetCounterId);
@@ -242,6 +296,18 @@ class OfficerQueueConsole extends Component
         $queueRuntime = app(QueueRuntimeService::class);
         $sourceTicket = QueueTicket::with('applicant')->findOrFail($ticketId);
         $this->authorizeTicketCounter($sourceTicket);
+
+        if ((int) $targetCounter->id === (int) $sourceTicket->service_counter_id) {
+            $this->addError('transferTargetCounterId', 'Loket tujuan tidak boleh sama dengan loket antrian saat ini.');
+
+            return;
+        }
+
+        if (! $targetCounter->is_active) {
+            $this->addError('transferTargetCounterId', 'Loket tujuan sedang ditutup.');
+
+            return;
+        }
 
         [$canCreate, $message] = $queueRuntime->canCreateTicket(
             $sourceTicket->applicant,
@@ -278,6 +344,7 @@ class OfficerQueueConsole extends Component
 
         $this->notes = '';
         $this->transferTargetCounterId = null;
+        $this->transferTicketId = null;
     }
 
     private function nextCallSequenceForCounter(ServiceCounter $counter): float
@@ -363,6 +430,7 @@ class OfficerQueueConsole extends Component
 
         $applicantQuery = Applicant::query()
             ->with('user')
+            ->whereHas('user.roles', fn (Builder $query) => $query->whereIn('name', self::APPLICANT_ROLE_NAMES))
             ->where(function (Builder $query) use ($currentSession) {
                 $query->whereDate('created_at', $currentSession->session_date)
                     ->orWhereHas('checkins', fn (Builder $query) => $query->where('queue_session_id', $currentSession->id))
@@ -382,7 +450,17 @@ class OfficerQueueConsole extends Component
                         ->orWhereHas('user', fn (Builder $query) => $query->where('email', 'like', $term));
                 });
             })
-            ->orderBy('created_at')
+            ->withExists(['queueTickets as has_active_queue_ticket' => function (Builder $query) use ($currentSession) {
+                $query->whereIn('status', self::ACTIVE_QUEUE_STATUSES)
+                    ->where(function (Builder $query) use ($currentSession) {
+                        $query->where('queue_session_id', $currentSession->id)
+                            ->orWhereDate('queue_date', $currentSession->session_date);
+                    });
+            }])
+            ->withMin(['checkins as today_presence_confirmed_at' => fn (Builder $query) => $query->where('queue_session_id', $currentSession->id)], 'presence_confirmed_at')
+            ->orderBy('has_active_queue_ticket')
+            ->orderByRaw('case when today_presence_confirmed_at is null then 1 else 0 end')
+            ->orderBy('today_presence_confirmed_at')
             ->orderBy('id');
 
         $totalApplicants = (clone $applicantQuery)->count();
@@ -395,6 +473,20 @@ class OfficerQueueConsole extends Component
             ->where('queue_session_id', $currentSession->id)
             ->whereIn('applicant_id', $applicants->pluck('id'))
             ->get()
+            ->keyBy('applicant_id');
+
+        $activeTicketByApplicantId = QueueTicket::query()
+            ->with(['counter.service', 'service'])
+            ->whereIn('applicant_id', $applicants->pluck('id'))
+            ->whereIn('status', self::ACTIVE_QUEUE_STATUSES)
+            ->where(function (Builder $query) use ($currentSession) {
+                $query->where('queue_session_id', $currentSession->id)
+                    ->orWhereDate('queue_date', $currentSession->session_date);
+            })
+            ->orderBy('assigned_at')
+            ->orderBy('id')
+            ->get()
+            ->unique('applicant_id')
             ->keyBy('applicant_id');
 
         $activeQrCode = QueueSessionQrCode::query()
@@ -427,15 +519,22 @@ class OfficerQueueConsole extends Component
             ->with(['applicant.user', 'service', 'counter'])
             ->when($selectedCounter, fn (Builder $query) => $query->where('service_counter_id', $selectedCounter->id), fn (Builder $query) => $query->whereRaw('1 = 0'))
             ->whereDate('queue_date', today())
-            ->whereIn('status', [
-                QueueTicket::STATUS_WAITING,
-                QueueTicket::STATUS_CALLED,
-                QueueTicket::STATUS_IN_PROGRESS,
-            ])
+            ->whereIn('status', self::ACTIVE_QUEUE_STATUSES)
             ->orderByRaw("case status when 'called' then 1 when 'in_progress' then 2 when 'waiting' then 3 else 4 end")
             ->orderBy('call_sequence')
             ->orderBy('id')
             ->get();
+
+        $firstWaitingTicketId = $activeTickets
+            ->where('status', QueueTicket::STATUS_WAITING)
+            ->sortBy([['call_sequence', 'asc'], ['id', 'asc']])
+            ->first()?->id;
+
+        $transferTicket = $this->transferTicketId
+            ? QueueTicket::query()
+                ->with(['applicant', 'service', 'counter.service'])
+                ->find($this->transferTicketId)
+            : null;
 
         $noShowTickets = QueueTicket::query()
             ->with(['applicant.user', 'service', 'counter'])
@@ -446,16 +545,11 @@ class OfficerQueueConsole extends Component
             ->orderByDesc('id')
             ->get();
 
-        $otherWaitingTickets = QueueTicket::query()
-            ->with(['applicant.user', 'service', 'counter'])
-            ->when($selectedCounter, fn (Builder $query) => $query->where('service_counter_id', '!=', $selectedCounter->id), fn (Builder $query) => $query->whereRaw('1 = 0'))
+        $completedCount = QueueTicket::query()
+            ->when($selectedCounter, fn (Builder $query) => $query->where('service_counter_id', $selectedCounter->id), fn (Builder $query) => $query->whereRaw('1 = 0'))
             ->whereDate('queue_date', today())
-            ->where('status', QueueTicket::STATUS_WAITING)
-            ->orderBy('queue_service_id')
-            ->orderBy('call_sequence')
-            ->orderBy('id')
-            ->limit(15)
-            ->get();
+            ->where('status', QueueTicket::STATUS_COMPLETED)
+            ->count();
 
         return view('livewire.pages.officer-queue-console', [
             'currentSession' => $currentSession,
@@ -465,19 +559,21 @@ class OfficerQueueConsole extends Component
             'isCounterManager' => $this->canManageAllCounters(),
             'assignedCountersCount' => $counters->count(),
             'waitingCount' => $activeTickets->where('status', QueueTicket::STATUS_WAITING)->count(),
-            'calledCount' => $activeTickets->where('status', QueueTicket::STATUS_CALLED)->count(),
-            'inProgressCount' => $activeTickets->where('status', QueueTicket::STATUS_IN_PROGRESS)->count(),
+            'completedCount' => $completedCount,
+            'noShowCount' => $noShowTickets->count(),
             'applicants' => $applicants,
             'totalApplicants' => $totalApplicants,
             'hasMoreApplicants' => $applicants->count() < $totalApplicants,
             'presenceByApplicantId' => $presenceByApplicantId,
+            'activeTicketByApplicantId' => $activeTicketByApplicantId,
             'activeQrCode' => $activeQrCode,
             'selectedServiceQuota' => $selectedServiceQuota,
             'selectedCounterAllocation' => $selectedCounterAllocation,
             'recommendedCounter' => $recommendedCounter,
             'activeTickets' => $activeTickets,
+            'firstWaitingTicketId' => $firstWaitingTicketId,
+            'transferTicket' => $transferTicket,
             'noShowTickets' => $noShowTickets,
-            'otherWaitingTickets' => $otherWaitingTickets,
         ]);
     }
 
@@ -507,7 +603,6 @@ class OfficerQueueConsole extends Component
         return ServiceCounter::query()
             ->with('service')
             ->where('is_active', true)
-            ->when($this->selectedCounterId, fn (Builder $query) => $query->whereKeyNot($this->selectedCounterId))
             ->orderBy('queue_service_id')
             ->orderBy('sort_order')
             ->get();

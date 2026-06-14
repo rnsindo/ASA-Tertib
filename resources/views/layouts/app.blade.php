@@ -654,18 +654,27 @@
         $isImpersonating = session()->has('impersonator_id');
         $impersonatorName = session('impersonator_name');
         $impersonatorEmail = session('impersonator_email');
+        $customerRoleNames = ['applicant', 'Pengguna', 'Pelanggan/Penanya', 'Pendaftar', 'Pelanggan'];
+        $officerRoleNames = ['superadmin', 'admin', 'officer', 'Super Admin', 'Petugas'];
+        $hasCustomerRole = $currentUser?->hasAnyRole($customerRoleNames) ?? false;
+        $hasOfficerRole = $currentUser?->hasAnyRole($officerRoleNames) ?? false;
         $canDashboard = ($currentUser?->can('pelanggan.dashboard_antrian') ?? false)
-            || ($currentUser?->hasAnyRole(['applicant', 'Pengguna', 'Pelanggan/Penanya']) ?? false);
+            || $hasCustomerRole;
         $canOfficerConsole = ($currentUser?->can('petugas.konsol_antrian') ?? false)
-            || ($currentUser?->hasAnyRole(['superadmin', 'admin', 'officer', 'Super Admin', 'Petugas']) ?? false);
+            || $hasOfficerRole;
         $canUserManagement = ($currentUser?->can('admin.manajemen_user') ?? false)
             || ($currentUser?->hasAnyRole(['superadmin', 'Super Admin']) ?? false);
         $canServiceManagement = ($currentUser?->can('admin.manajemen_layanan') ?? false)
             || ($currentUser?->hasAnyRole(['superadmin', 'Super Admin']) ?? false);
         $canCustomerHome = ($currentUser?->can('pelanggan.beranda') ?? false)
-            || ($currentUser?->hasAnyRole(['applicant', 'Pengguna', 'Pelanggan/Penanya']) ?? false);
+            || $hasCustomerRole;
         $canOfficerHome = ($currentUser?->can('petugas.beranda') ?? false)
-            || ($currentUser?->hasAnyRole(['superadmin', 'admin', 'officer', 'Super Admin', 'Petugas']) ?? false);
+            || $hasOfficerRole;
+        $canCustomerStatus = ($currentUser?->can('pelanggan.status_antrian') ?? false) || $hasCustomerRole;
+        $canCustomerScanQr = ($currentUser?->can('pelanggan.scan_qr') ?? false) || $hasCustomerRole;
+        $canCustomerHistory = ($currentUser?->can('pelanggan.riwayat') ?? false) || $hasCustomerRole;
+        $canCustomerProfile = ($currentUser?->can('pelanggan.profil') ?? false) || $hasCustomerRole;
+        $showOfficerBottomNav = $canOfficerConsole || $canServiceManagement || $canUserManagement;
         $canHome = $canCustomerHome || $canOfficerHome;
         $homeUrl = $isAuthenticated
             ? ($canOfficerConsole ? route('officer.console') : ($canDashboard ? route('dashboard') : route('login')))
@@ -726,36 +735,73 @@
 
         @auth
             <nav class="bottom-nav" aria-label="Navigasi bawah">
-                @can('pelanggan.status_antrian')
-                    <a class="nav-item" href="{{ route('dashboard') }}">
-                        <span class="nav-icon"><svg viewBox="0 0 24 24"><path d="M12 8v5l3 3"/><path d="M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"/></svg></span>
-                        Status
+                @if($showOfficerBottomNav)
+                    <a class="nav-item" href="{{ route('officer.console') }}">
+                        <span class="nav-icon"><svg viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13"/><path d="M3 6h.01M3 12h.01M3 18h.01"/></svg></span>
+                        Antrian
                     </a>
-                @endcan
-                @can('pelanggan.scan_qr')
-                    <a class="nav-item" href="#">
-                        <span class="nav-icon"><svg viewBox="0 0 24 24"><path d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h3v3h-3zM18 18h3v3h-3zM18 14h3"/></svg></span>
-                        Scan QR
+                    <a class="nav-item {{ request()->routeIs('officer.other-counters') ? 'active' : '' }}" href="{{ route('officer.other-counters') }}">
+                        <span class="nav-icon"><svg viewBox="0 0 24 24"><path d="M4 6h16"/><path d="M4 12h16"/><path d="M4 18h16"/><path d="M8 6v12"/><path d="M16 6v12"/></svg></span>
+                        Loket
                     </a>
-                @endcan
-                @if($canHome)
-                <a class="nav-item {{ request()->routeIs('dashboard') || request()->routeIs('officer.console') ? 'active' : '' }}" href="{{ $homeUrl }}">
-                    <span class="nav-icon"><svg viewBox="0 0 24 24"><path d="m3 11 9-8 9 8"/><path d="M5 10v10h14V10"/><path d="M9 20v-6h6v6"/></svg></span>
-                    Home
-                </a>
+                    <a class="nav-item {{ request()->routeIs('officer.console') ? 'active' : '' }}" href="{{ route('officer.console') }}">
+                        <span class="nav-icon"><svg viewBox="0 0 24 24"><path d="m3 11 9-8 9 8"/><path d="M5 10v10h14V10"/><path d="M9 20v-6h6v6"/></svg></span>
+                        Home
+                    </a>
+                    @if($canServiceManagement)
+                        <a class="nav-item {{ request()->routeIs('services.management') ? 'active' : '' }}" href="{{ route('services.management') }}">
+                            <span class="nav-icon"><svg viewBox="0 0 24 24"><path d="M4 7h16"/><path d="M4 12h16"/><path d="M4 17h10"/><path d="M18 17v4M16 19h4"/></svg></span>
+                            Layanan
+                        </a>
+                    @else
+                        <a class="nav-item" href="{{ route('officer.console') }}">
+                            <span class="nav-icon"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8M8 17h6"/></svg></span>
+                            Log
+                        </a>
+                    @endif
+                    @if($canUserManagement)
+                        <a class="nav-item {{ request()->routeIs('users.management') ? 'active' : '' }}" href="{{ route('users.management') }}">
+                            <span class="nav-icon"><svg viewBox="0 0 24 24"><path d="M18 20a6 6 0 0 0-12 0"/><path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z"/></svg></span>
+                            User
+                        </a>
+                    @else
+                        <a class="nav-item" href="{{ route('officer.console') }}">
+                            <span class="nav-icon"><svg viewBox="0 0 24 24"><path d="M12 15.5A3.5 3.5 0 1 0 12 8a3.5 3.5 0 0 0 0 7.5Z"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06A1.65 1.65 0 0 0 15 19.4a1.65 1.65 0 0 0-1 .6 1.65 1.65 0 0 0-.33 1.82V22a2 2 0 1 1-4 0v-.18A1.65 1.65 0 0 0 8.6 20a1.65 1.65 0 0 0-1.82-.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-.6-1 1.65 1.65 0 0 0-1.82-.33H2a2 2 0 1 1 0-4h.18A1.65 1.65 0 0 0 4 8.6a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 8.6 4a1.65 1.65 0 0 0 1-.6A1.65 1.65 0 0 0 9.82 2H10a2 2 0 1 1 4 0v.18A1.65 1.65 0 0 0 15 4.6a1.65 1.65 0 0 0 1.82.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9c.23.36.36.77.6 1h.18a2 2 0 1 1 0 4H20a1.65 1.65 0 0 0-.6 1Z"/></svg></span>
+                            Profil
+                        </a>
+                    @endif
+                @else
+                    @if($canCustomerStatus)
+                        <a class="nav-item" href="{{ route('dashboard') }}">
+                            <span class="nav-icon"><svg viewBox="0 0 24 24"><path d="M12 8v5l3 3"/><path d="M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"/></svg></span>
+                            Status
+                        </a>
+                    @endif
+                    @if($canCustomerScanQr)
+                        <a class="nav-item" href="#">
+                            <span class="nav-icon"><svg viewBox="0 0 24 24"><path d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h3v3h-3zM18 18h3v3h-3zM18 14h3"/></svg></span>
+                            Scan QR
+                        </a>
+                    @endif
+                    @if($canHome)
+                    <a class="nav-item {{ request()->routeIs('dashboard') || request()->routeIs('officer.console') ? 'active' : '' }}" href="{{ $homeUrl }}">
+                        <span class="nav-icon"><svg viewBox="0 0 24 24"><path d="m3 11 9-8 9 8"/><path d="M5 10v10h14V10"/><path d="M9 20v-6h6v6"/></svg></span>
+                        Home
+                    </a>
+                    @endif
+                    @if($canCustomerHistory)
+                        <a class="nav-item" href="#">
+                            <span class="nav-icon"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8M8 17h6"/></svg></span>
+                            Riwayat
+                        </a>
+                    @endif
+                    @if($canCustomerProfile)
+                        <a class="nav-item" href="#">
+                            <span class="nav-icon"><svg viewBox="0 0 24 24"><path d="M18 20a6 6 0 0 0-12 0"/><path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z"/></svg></span>
+                            Profil
+                        </a>
+                    @endif
                 @endif
-                @can('pelanggan.riwayat')
-                    <a class="nav-item" href="#">
-                        <span class="nav-icon"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8M8 17h6"/></svg></span>
-                        Riwayat
-                    </a>
-                @endcan
-                @can('pelanggan.profil')
-                    <a class="nav-item" href="#">
-                        <span class="nav-icon"><svg viewBox="0 0 24 24"><path d="M18 20a6 6 0 0 0-12 0"/><path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z"/></svg></span>
-                        Profil
-                    </a>
-                @endcan
             </nav>
 
             <button class="screen-dim" id="drawerOverlay" type="button" aria-label="Tutup menu"></button>

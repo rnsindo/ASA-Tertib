@@ -9,6 +9,7 @@ use Laravel\Socialite\Facades\Socialite;
 use Laravel\Socialite\Two\InvalidStateException;
 use Livewire\Livewire;
 use Spatie\Permission\Models\Permission;
+use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
 class ExampleTest extends TestCase
@@ -233,6 +234,85 @@ class ExampleTest extends TestCase
         $response->assertDontSee('phone-shell');
         $response->assertDontSee('width: min(430px', false);
         $response->assertDontSee('transform: translateX(-50%)', false);
+    }
+
+    public function test_customer_role_fallback_keeps_bottom_navigation_visible(): void
+    {
+        $role = Role::firstOrCreate(['name' => 'Pendaftar']);
+        $user = User::factory()->create([
+            'email' => 'layout-customer-role@example.test',
+            'password' => 'password123',
+        ]);
+        $user->assignRole($role);
+
+        $response = $this->actingAs($user)->get('/dashboard');
+
+        $response->assertOk();
+        $response->assertSee('class="bottom-nav"', false);
+        $response->assertSee('Status');
+        $response->assertSee('Scan QR');
+        $response->assertSee('Home');
+        $response->assertSee('Riwayat');
+        $response->assertSee('Profil');
+    }
+
+    public function test_officer_and_super_admin_have_bottom_navigation_items(): void
+    {
+        $officerRole = Role::firstOrCreate(['name' => 'Petugas']);
+        $officer = User::factory()->create([
+            'email' => 'layout-officer-role@example.test',
+            'password' => 'password123',
+        ]);
+        $officer->assignRole($officerRole);
+
+        $response = $this->actingAs($officer)->get('/petugas');
+
+        $response->assertOk();
+        $response->assertSee('class="bottom-nav"', false);
+        $response->assertSee('Antrian');
+        $response->assertSee('Loket');
+        $response->assertSee(route('officer.other-counters'), false);
+        $response->assertSee('Home');
+        $response->assertSee('Log');
+        $response->assertSee('Profil');
+        $response->assertDontSee('class="nav-item active" href="' . route('officer.console') . '">
+                        <span class="nav-icon"><svg viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13"', false);
+        $response->assertSee('class="nav-item active" href="' . route('officer.console') . '">
+                        <span class="nav-icon"><svg viewBox="0 0 24 24"><path d="m3 11 9-8 9 8"', false);
+
+        $response = $this->actingAs($officer)->get('/petugas/loket-lain');
+
+        $response->assertOk();
+        $response->assertSee('Daftar Loket Lain');
+        $response->assertSee('class="nav-item active" href="' . route('officer.other-counters') . '"', false);
+
+        $superAdminRole = Role::firstOrCreate(['name' => 'Super Admin']);
+        $superAdmin = User::factory()->create([
+            'email' => 'layout-superadmin-role@example.test',
+            'password' => 'password123',
+        ]);
+        $superAdmin->assignRole($superAdminRole);
+
+        $response = $this->actingAs($superAdmin)->get('/petugas');
+
+        $response->assertOk();
+        $response->assertSee('class="bottom-nav"', false);
+        $response->assertSee('Antrian');
+        $response->assertSee('Loket');
+        $response->assertSee(route('officer.other-counters'), false);
+        $response->assertSee('Home');
+        $response->assertSee('Layanan');
+        $response->assertSee('User');
+        $response->assertDontSee('class="nav-item active" href="' . route('officer.console') . '">
+                        <span class="nav-icon"><svg viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13"', false);
+        $response->assertSee('class="nav-item active" href="' . route('officer.console') . '">
+                        <span class="nav-icon"><svg viewBox="0 0 24 24"><path d="m3 11 9-8 9 8"', false);
+
+        $response = $this->actingAs($superAdmin)->get('/petugas/loket-lain');
+
+        $response->assertOk();
+        $response->assertSee('Daftar Loket Lain');
+        $response->assertSee('class="nav-item active" href="' . route('officer.other-counters') . '"', false);
     }
 
     public function test_guest_regular_blade_page_extends_master_without_authenticated_chrome(): void
