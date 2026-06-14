@@ -1,0 +1,74 @@
+# Change Log
+
+## 2026-06-11
+
+- Membuat MVP aplikasi antrian universal untuk implementasi awal PSB SMK.
+- Menambahkan Google SSO dengan registrasi lanjutan berbasis session sementara.
+- Menambahkan login password lokal.
+- Menambahkan model dan tabel `applicants`, `queue_services`, `service_counters`, dan `queue_tickets`.
+- Menambahkan status tiket antrian: waiting, called, in_progress, cancelled, transferred, completed.
+- Menambahkan dashboard pendaftar dan konsol petugas berbasis Livewire.
+- Menambahkan role dan permission Spatie.
+- Menetapkan desain baku biru-putih di layout aplikasi.
+- Menambahkan dokumentasi project di folder `docs`.
+- Mengisi `GOOGLE_CLIENT_ID` pada `.env` lokal; `GOOGLE_CLIENT_SECRET` masih perlu diisi agar Google SSO aktif penuh.
+- Menambahkan status `no_show` untuk pendaftar yang tidak berada di tempat saat dipanggil.
+- Menambahkan `call_sequence`, `no_show_count`, `no_show_at`, dan `requeued_at` pada tiket antrian.
+- Menambahkan tombol `Tidak di Tempat` dan `Masukkan Ulang` di konsol petugas.
+- Menerapkan aturan requeue berulang: pendaftar yang hadir kembali selalu masuk setelah dua antrian menunggu berikutnya pada loket yang sama.
+- Membuat Nama Lengkap pada Formulir Pendaftaran Lanjutan bisa diedit, mengubah pesan validasi form ke bahasa Indonesia, dan menambahkan indikator loading saat proses registrasi berjalan.
+- Menghapus fungsi `/admin`, resource turunannya, dependency panel admin lama, dan script Composer terkait.
+- Menambahkan halaman prototype desain mobile di `/design` dengan side navigation drawer terbuka, dashboard yang diredupkan, kartu status antrian, aksi cepat, log antrian, bottom navigation, dan avatar ilustrasi.
+- Mengubah prototype `/design` menjadi tampilan browser HP tanpa frame ponsel, drawer default tertutup dengan kontrol buka/tutup, dan menu drawer berada langsung setelah tombol logout.
+- Memperbarui header dan bottom navigation prototype `/design` agar full-width di mobile, memakai warna biru lembut non-putih, dengan radius bawah pada header dan radius atas pada bottom navigation.
+- Mempertebal warna header dan bottom navigation prototype `/design` ke biru gelap elegan serta menambah jarak bawah konten agar tidak menempel ke bottom navigation saat discroll.
+- Mengimplementasikan desain mobile ke master layout `layouts.app` agar halaman login, registrasi lanjutan, dashboard, dan konsol petugas memakai header, drawer, konten, dan bottom navigation yang konsisten tanpa mengubah file `/design`.
+- Menambahkan dukungan `@extends('layouts.app')` pada master layout dan memindahkan halaman `/test` ke layout yang sama agar halaman Blade biasa juga mengikuti desain global.
+- Mengecualikan halaman guest dari chrome aplikasi: `/login`, `/register/complete`, dan halaman yang belum login tidak menampilkan header, bottom navigation, sidebar drawer, atau script drawer.
+- Menetapkan nama project menjadi `ASA-Tertib` melalui `APP_NAME`, memperbarui dokumentasi, dan membuat title browser dinamis dari title halaman dengan fallback ke nama aplikasi.
+- Menambahkan dokumen rancangan `PRESENCE_QUEUE_DESIGN.md` untuk sistem antrian wajib di tempat: pendaftar harus konfirmasi lokasi melalui QR atau petugas sebelum bisa masuk antrian.
+- Memperluas rancangan antrian wajib di tempat dengan aturan QR ambil antrian harian/jam, batas maksimal layanan per hari yang tetap mengizinkan registrasi, dan pembagian target pendaftar per loket secara rata.
+- Menambahkan rancangan data lintas layanan: satu identitas pendaftar di `applicants`, tiket dipisah per layanan di `queue_tickets`, dan data khusus layanan disimpan terpisah agar layanan yang penuh tidak menutup layanan lain.
+- Menambahkan rancangan dependensi antar layanan agar layanan lanjutan, misalnya Wawancara, hanya bisa diambil jika pendaftar sudah masuk antrian atau selesai pada layanan prasyarat.
+- Menambahkan tabel `queue_service_dependencies` dan enforcement di konsol petugas agar setiap layanan dinamis dapat mensyaratkan mode prasyarat `queued`, `called`, `in_progress`, atau `completed`.
+- Menambahkan tabel/model `app_settings` untuk menyimpan setting dinamis seperti nama aplikasi, logo aplikasi, warna utama, dan variable setting lain di masa depan.
+- Mengimplementasikan runtime antrian wajib di tempat: `queue_sessions`, QR token check-in, `attendance_checkins`, validasi wajib hadir sebelum tiket dibuat, dan route `/check-in/{token}`.
+- Mengimplementasikan kuota layanan harian dan alokasi target loket: `service_daily_quotas`, `counter_daily_allocations`, rekomendasi loket otomatis, dan pemblokiran hanya pada layanan yang kuotanya penuh.
+- Menambahkan `applicant_service_records` untuk menyimpan data khusus pendaftar per layanan tanpa menggandakan data induk pendaftar.
+- Menghubungkan setting `app.name` dan `app.logo` dari `app_settings` ke layout aplikasi dan halaman login.
+- Menghapus kartu `Konfirmasi Kehadiran` terpisah dari dashboard pendaftar dan menggantinya dengan tombol `Ambil Antrian` pada setiap layanan.
+- Menambahkan modal scan QR berbasis kamera pada tombol `Ambil Antrian`, lengkap dengan input kode manual jika kamera atau scan QR bermasalah.
+- Memisahkan perilaku scan QR dan kode manual: QR yang terbaca langsung diproses otomatis, sedangkan tombol yang terlihat hanya untuk `Gunakan Kode Manual`.
+- Menambahkan kolom `manual_code` pada `queue_session_qr_codes`; QR dan kode manual aktif memiliki masa berlaku default 2 jam dan QR/kode lama otomatis dinonaktifkan saat petugas membuat yang baru.
+- Menghubungkan tombol `Ambil Antrian` agar QR/kode valid langsung mengonfirmasi hadir, mengecek kuota/prasyarat, membuat tiket layanan, dan memilih loket rekomendasi.
+- Menampilkan keterangan nama layanan prasyarat pada layanan yang wajib menunggu layanan lain selesai atau terpenuhi.
+- Melengkapi seeder instalasi awal dengan role `Super Admin`, `Petugas`, `Pengguna`, akun `superadmin@asa-link.cloud`, data master layanan/loket/dependensi, kuota harian, alokasi loket, setting aplikasi, dan test baseline instalasi baru.
+- Menambahkan permission default `page.*` dan `menu.*`, lalu melindungi item drawer/bottom navigation menggunakan permission masing-masing.
+- Menambahkan estimasi waktu antrian berbasis setting awal `queue.default_service_minutes` 10 menit, lalu otomatis memakai rata-rata durasi tiket selesai per layanan.
+- Menambahkan halaman `/pengaturan-aplikasi` untuk Super Admin, menu drawer `Pengaturan Aplikasi`, permission `page.app-settings` dan `menu.app-settings`, serta form untuk mengubah setting aplikasi utama.
+- Mengubah desain halaman Pengaturan Aplikasi dari tabel teknis menjadi form mobile dengan input nama aplikasi, switch logo, upload logo, color picker, dan estimasi awal pelayanan.
+- Mengubah penggantian logo menjadi browse/upload file dengan thumbnail logo aktif dan fallback jika logo kosong atau gagal dimuat; penambahan variabel setting baru dikembalikan ke seeder/proses development.
+- Menambahkan upload favicon browser melalui setting `app.favicon`, thumbnail aktif pada halaman Pengaturan Aplikasi, serta fallback favicon ke logo aktif atau ikon SVG otomatis jika kosong/gagal dimuat.
+- Menghapus hero pembuka dari halaman Pengaturan Aplikasi.
+- Menghapus menu drawer `Pelayanan 24/7`, `Informasi Pendaftaran`, dan `Panduan Lengkap` dari layout aplikasi serta seeder permission.
+- Menambahkan halaman `/manajemen-user` untuk Super Admin dengan pencarian/filter user, reset password, Login As, permission `admin.manajemen_user`, `admin.reset_password_user`, dan `admin.login_sebagai_user`.
+- Menambahkan status `Sedang Login As` pada drawer dengan informasi akun asli dan tombol kembali ke akun asli.
+- Mengubah role baku menjadi `Super Admin`, `Petugas`, dan `Pelanggan/Penanya`.
+- Mengubah standar penamaan permission menjadi berkelompok: `admin.*`, `petugas.*`, dan `pelanggan.*`, lalu menyiapkannya pada seeder.
+- Menambahkan kompatibilitas seeder untuk role lama `Pengguna`/`applicant` agar mendapat permission setara `Pelanggan/Penanya`.
+- Menambahkan halaman error standalone untuk `403`, `404`, `419`, `500`, `503`, dan fallback `minimal` tanpa header/nav aplikasi, lengkap dengan tombol Dashboard.
+- Menghapus route contoh `/contoh-error/{kode}` setelah preview selesai dan menambahkan logo aplikasi rata tengah pada bagian atas semua halaman error.
+- Menangani `InvalidStateException` pada Google SSO agar user yang sebenarnya masih login diarahkan ke dashboard, bukan kembali ke halaman login dengan header/nav aplikasi.
+- Mengubah halaman Manajemen User agar daftar user dimuat bertahap 5 data per scroll dan menambahkan tombol copy detail akun pada card setelah reset password.
+- Menambahkan halaman `/manajemen-layanan` untuk Super Admin dengan permission `admin.manajemen_layanan`, menu drawer, form tambah layanan, popup loket saat layanan diklik, form tambah loket, switch aktif/nonaktif, recalculation alokasi loket, dan toast notifikasi proses.
+- Mengubah tambah layanan pada `/manajemen-layanan` menjadi modal, serta membuat kode layanan otomatis dari inisial nama layanan dengan angka urutan jika kode yang sama sudah ada.
+- Menambahkan edit layanan dari popup detail layanan, menjaga kode layanan tetap terkunci saat edit, dan memastikan layanan yang baru dibuat langsung ditampilkan pada popup detail setelah modal tambah tertutup.
+- Mengubah pengelolaan loket pada `/manajemen-layanan` agar tambah/edit loket memakai modal, kode loket dibuat otomatis dari inisial nama loket, petugas loket dapat dipilih dari user Petugas, dan notifikasi gagal menyertakan alasan.
+- Menambahkan pengaturan syarat layanan sebelumnya pada `/manajemen-layanan`, termasuk pilihan layanan prasyarat, status minimal prasyarat, ringkasan syarat pada detail layanan, dan guard agar alur layanan tidak berputar.
+- Menambahkan tombol `Download QR` pada konsol petugas dan halaman print A4 `/petugas/qr-ambil-antrian/print` berisi kode manual besar, QR SVG besar, masa berlaku, dan format siap cetak/simpan PDF.
+- Menambahkan setting `app.timezone` pada Pengaturan Aplikasi, default `Asia/Jakarta`, lalu menerapkannya pada print QR, konsol petugas, log pendaftar, dan header dashboard dengan jam live sampai detik.
+- Merapikan dashboard petugas agar default menampilkan data petugas, loket tugas, status buka/tutup loket, ringkasan antrian, serta kondisi khusus jika petugas belum ditugaskan ke loket tertentu.
+- Menambahkan modal edit permission pada `/manajemen-user` dengan checklist permission, label `Bawaan role` untuk permission default dari role, direct permission tambahan user, dan toast status saat penyimpanan.
+- Menambahkan edit role user pada modal `/manajemen-user` dengan guard agar Super Admin tidak terkunci keluar, minimal satu Super Admin tetap tersedia, dan permission bawaan role tetap dibedakan dari direct permission.
+- Menambahkan status akun `Aktif`/`Disable` pada `/manajemen-user`; akun disable tidak bisa login via password atau Google SSO, session normal otomatis dikeluarkan oleh middleware, tetapi Super Admin tetap bisa memakai Login As untuk pemeriksaan akun disable.
+- Mengubah daftar `Arahkan Pendaftar ke Loket` pada `/petugas` dari tabel menjadi card mobile dengan scroll internal, pencarian cepat, dan lazy-load 5 data pendaftar hari ini per batch.

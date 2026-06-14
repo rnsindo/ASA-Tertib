@@ -1,0 +1,13 @@
+# Menentukan waktu estimasi awal contoh 10 menit, setelah nomor antrian pertama dan seterusnya selesai maka akan menghitung rata-rata waktu pelayanan, kemudian di kalikan urutan nomor berapa.
+
+# Membuat role permission default yaitu Super Admin, Petugas dan Pelanggan/Penanya. kemudian memberikan setiap menu dengan permissionya masing-masing.
+
+Membuat 3 halaman dashboard untuk role petugas dan pengguna, super admin akan menggunakan dashboard petugas.
+
+Membuat kelompok menu Super Admin, Petugas dan Pelanggan/Penanya.
+
+
+pada halaman dashboard pendaftar bagaimana agar layanan yang perlu menyelesaikan layanan lain posisinya berada di bawah layanan yang perlu di selesaikan dulu?
+
+konfirmasi kehadiran saat ambil antrian harus terus di lakukan saat berpindah layanan atau loket oleh pendaftar. Konfirmasi kehadiran tidak berlaku jika petugas yang memasukkan pendaftar ke dalam antrian
+
