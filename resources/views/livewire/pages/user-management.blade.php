@@ -421,7 +421,7 @@
             </div>
             <div class="field">
                 <label for="roleFilter">Role</label>
-                <select id="roleFilter" class="select" wire:model.live="roleFilter">
+                <select id="roleFilter" class="select" wire:model.live="roleFilter" data-autocomplete-select data-autocomplete-placeholder="Cari role">
                     <option value="">Semua Role</option>
                     @foreach($roles as $role)
                         <option value="{{ $role }}">{{ $role }}</option>

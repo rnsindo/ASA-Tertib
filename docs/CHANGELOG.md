@@ -78,7 +78,19 @@
 - Memisahkan `Daftar Loket Lain` dari dashboard petugas ke halaman khusus `/petugas/loket-lain`, mengganti menu nav bawah petugas dari `QR` menjadi `Loket`, dan memberi warna tombol loket: orange untuk `Tutup Loket` saat loket buka, hijau untuk `Buka Loket` saat loket tutup.
 - Menambahkan pengaturan quota harian pada `/pengaturan-aplikasi`: switch aktif/nonaktif dan input total quota harian saat aktif; runtime antrian mengabaikan batas quota saat switch dimatikan.
 - Menambahkan `SEED_SYNC_MODE` dengan default `add_only` pada seeder agar deploy/update tidak menimpa setting yang sudah diubah operator, serta mode `sync` untuk sinkronisasi ulang default bila diperlukan.
+- Mempertegas tombol `Ambil Antrian` pada dashboard pendaftar agar terkunci ketika pendaftar masih punya antrian aktif/terlewat di layanan lain, menampilkan tooltip saat diketuk, dan mencegah scanner QR terbuka.
+- Membatasi status layanan dashboard pendaftar hanya pada tiket sesi hari ini agar antrian lama berstatus aktif tidak mengunci pengambilan antrian baru, serta menolak QR/kode manual dari sesi tanggal sebelumnya.
+- Mengubah badge status kanan atas pada kartu `Nomor Antrian` dashboard pendaftar menjadi berwarna per status, memakai label `Menunggu` untuk status antrian, dan tetap menampilkan `Tidak di Tempat` saat pendaftar terlewat.
+- Menambahkan tanggal pada `Log Antrian` dashboard pendaftar sehingga setiap item menampilkan tanggal dan jam.
+- Membatasi tampilan `QR & Kode Ambil Antrian` pada dashboard petugas hanya untuk QR/kode yang masih aktif, serta membatasi masa berlaku default QR/kode maksimal sampai pukul 23.00 pada hari yang sama.
+- Menambahkan pengaturan batas durasi QR/kode manual pada `/pengaturan-aplikasi`: jika nonaktif QR/kode berlaku sampai 23.00, jika aktif operator dapat menentukan jumlah jam yang tetap tunduk batas harian 23.00.
 - Memperjelas UX quota penuh pada dashboard pendaftar: registrasi tetap tersimpan, layanan penuh tetap tampil, tombol `Ambil Antrian` menampilkan pesan penuh dan tidak membuka scanner QR/kode.
 - Mengubah `Arahkan Pendaftar ke Loket` pada dashboard petugas: tombol `Masukkan` membuka modal pilih layanan, lalu sistem otomatis memilih loket buka dengan beban paling ringan.
 - Mengubah perhitungan target quota loket agar saat quota harian aktif, target per loket dihitung dari quota harian dibagi seluruh loket layanan, termasuk loket yang sedang tutup/nonaktif.
 - Menambahkan permission `petugas.kelola_qr_antrian` untuk melindungi tombol `Buat/Ganti QR & Kode` pada dashboard petugas; permission ini tersedia di seeder tetapi tidak menjadi bawaan role `Petugas`.
+- Mengubah seluruh field select menjadi autocomplete mobile-friendly dengan pencarian dan batas tampilan maksimal 5 opsi.
+- Memperbaiki modal scan QR dashboard pendaftar agar input kode manual tetap dapat digunakan pada layar HP beresolusi kecil atau saat keyboard muncul.
+- Memecah `DatabaseSeeder` menjadi seeder terpisah untuk role/permission, setting, akun default, layanan, dependensi layanan, loket, dan quota harian; semua tetap mengikuti mode `add_only` atau `sync`.
+- Mengubah tampilan kode manual di dashboard petugas menjadi OTP box terpisah per karakter agar lebih mudah dibaca saat ditunjukkan ke pendaftar.
+- Mengubah urutan `Status Layanan` pada dashboard pendaftar agar layanan yang bisa langsung diambil antrian tampil paling awal dan layanan bersyarat mengikuti urutan prasyaratnya.
+- Membatasi pendaftar agar hanya bisa memiliki satu antrian aktif lintas layanan, menambahkan pesan klik pada tombol layanan yang terkunci, serta menambahkan modal `Cabut Antrian` untuk membatalkan tiket yang masih menunggu.

@@ -104,11 +104,30 @@ Data master awal:
 - Setting zona waktu: `app.timezone = Asia/Jakarta`.
 - Setting estimasi: `queue.default_service_minutes = 10`.
 - Setting quota: `queue.daily_quota_enabled = true`, `queue.daily_quota_limit = 200`.
+- Setting QR/kode ambil antrian: `queue.qr_expiry_limit_enabled = false`, `queue.qr_expiry_limit_hours = 2`. Saat batas durasi nonaktif, QR/kode berlaku sampai pukul 23.00 hari yang sama. Saat aktif, QR/kode berlaku sesuai jumlah jam tetapi tetap tidak melewati pukul 23.00.
 
-Mode seeder default adalah `add_only`, sehingga `php artisan db:seed` saat update aplikasi hanya menambahkan setting baru yang belum ada dan tidak menimpa pengaturan yang sudah diubah dari halaman aplikasi. Jika benar-benar ingin menyinkronkan ulang default dari kode seeder, set environment berikut sebelum menjalankan seeder:
+Seeder dipisah berdasarkan jenis data agar update bisa lebih terarah:
+
+- `RolePermissionSeeder`
+- `AppSettingSeeder`
+- `DefaultUserSeeder`
+- `QueueServiceSeeder`
+- `QueueServiceDependencySeeder`
+- `ServiceCounterSeeder`
+- `ServiceDailyQuotaSeeder`
+
+Mode seeder default adalah `add_only`, sehingga `php artisan db:seed` saat update aplikasi hanya menambahkan data default yang belum ada dan tidak menimpa pengaturan, layanan, loket, akun, role, atau relasi permission yang sudah diubah operator. Jika benar-benar ingin menyinkronkan ulang default dari kode seeder, set environment berikut sebelum menjalankan seeder:
 
 ```env
 SEED_SYNC_MODE=sync
+```
+
+Seeder juga bisa dipanggil satu per satu jika hanya ingin mengisi ulang area tertentu, contoh:
+
+```powershell
+php artisan db:seed --class=AppSettingSeeder
+php artisan db:seed --class=RolePermissionSeeder
+php artisan db:seed --class=ServiceCounterSeeder
 ```
 
 8. Jalankan server lokal:
@@ -127,7 +146,7 @@ http://127.0.0.1:8000/login
 
 Halaman `/pengaturan-aplikasi` tersedia untuk role `Super Admin`. Menu `Pengaturan Aplikasi` muncul di drawer jika user memiliki permission `admin.pengaturan_aplikasi`.
 
-Halaman ini mengelola data pada tabel `app_settings`, termasuk nama aplikasi, upload/aktif-nonaktif logo, upload favicon browser, warna utama, zona waktu aplikasi, estimasi awal pelayanan, dan switch quota harian. Tampilan halaman berupa form mobile, bukan tabel daftar setting mentah.
+Halaman ini mengelola data pada tabel `app_settings`, termasuk nama aplikasi, upload/aktif-nonaktif logo, upload favicon browser, warna utama, zona waktu aplikasi, estimasi awal pelayanan, switch quota harian, dan batas durasi QR/kode manual. Tampilan halaman berupa form mobile, bukan tabel daftar setting mentah.
 
 Favicon memakai setting `app.favicon`. Jika kosong, aplikasi memakai logo aktif sebagai fallback. Jika logo juga kosong atau file ikon gagal dimuat di browser, layout memakai ikon SVG otomatis dari huruf awal nama aplikasi dan warna utama.
 

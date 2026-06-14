@@ -20,8 +20,10 @@ use App\Livewire\Pages\CompleteRegistration;
 use App\Livewire\Pages\ServiceManagement;
 use App\Livewire\Pages\UserManagement;
 use App\Services\QueueRuntimeService;
+use App\Support\AppClock;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
 use Livewire\Livewire;
@@ -76,6 +78,132 @@ class QueuePagesTest extends TestCase
         $response->assertSee('Ambil Antrian');
         $response->assertDontSee('Konfirmasi Kehadiran');
         $response->assertDontSee('Wajib scan QR');
+    }
+
+    public function test_applicant_dashboard_top_ticket_shows_current_queue_status(): void
+    {
+        Role::firstOrCreate(['name' => 'applicant']);
+
+        $user = User::factory()->create([
+            'email' => 'queue-status-applicant@example.test',
+            'password' => 'password123',
+        ]);
+        $user->assignRole('applicant');
+
+        $applicant = Applicant::create([
+            'user_id' => $user->id,
+            'full_name' => 'Pendaftar Status Antrian',
+            'school_origin' => 'SMP Status',
+            'nisn' => '9944556677',
+            'whatsapp' => '089944556677',
+            'status' => 'registered',
+        ]);
+
+        $service = QueueService::create([
+            'name' => 'Layanan Status',
+            'slug' => 'layanan-status',
+            'code' => 'LSA',
+            'sort_order' => 1,
+            'is_active' => true,
+        ]);
+
+        $counter = ServiceCounter::create([
+            'queue_service_id' => $service->id,
+            'name' => 'Loket Status',
+            'code' => 'LSA-1',
+            'sort_order' => 1,
+            'is_active' => true,
+        ]);
+
+        $session = app(QueueRuntimeService::class)->currentSession();
+
+        $ticket = QueueTicket::create([
+            'applicant_id' => $applicant->id,
+            'queue_session_id' => $session->id,
+            'queue_service_id' => $service->id,
+            'service_counter_id' => $counter->id,
+            'queue_date' => $session->session_date,
+            'queue_number' => 1,
+            'call_sequence' => 1000,
+            'ticket_code' => 'LSA-001',
+            'status' => QueueTicket::STATUS_NO_SHOW,
+            'assigned_at' => now(),
+            'called_at' => now(),
+            'no_show_at' => now(),
+        ]);
+
+        $this->actingAs($user)
+            ->get('/dashboard')
+            ->assertOk()
+            ->assertSeeInOrder([
+                'Nomor Antrian',
+                'LSA-001',
+                'Tidak di Tempat',
+            ])
+            ->assertSee('ticket-pill-missed', false)
+            ->assertSee(AppClock::format($ticket->created_at, 'd/m/Y H:i'))
+            ->assertSee('Nomor Anda sudah dipanggil tetapi tidak berada di tempat.');
+    }
+
+    public function test_applicant_dashboard_waiting_status_is_shown_as_menunggu(): void
+    {
+        Role::firstOrCreate(['name' => 'applicant']);
+
+        $user = User::factory()->create([
+            'email' => 'queue-waiting-status@example.test',
+            'password' => 'password123',
+        ]);
+        $user->assignRole('applicant');
+
+        $applicant = Applicant::create([
+            'user_id' => $user->id,
+            'full_name' => 'Pendaftar Status Menunggu',
+            'school_origin' => 'SMP Menunggu',
+            'nisn' => '9944556688',
+            'whatsapp' => '089944556688',
+            'status' => 'registered',
+        ]);
+
+        $service = QueueService::create([
+            'name' => 'Layanan Menunggu',
+            'slug' => 'layanan-menunggu',
+            'code' => 'LMG',
+            'sort_order' => 1,
+            'is_active' => true,
+        ]);
+
+        $counter = ServiceCounter::create([
+            'queue_service_id' => $service->id,
+            'name' => 'Loket Menunggu',
+            'code' => 'LMG-1',
+            'sort_order' => 1,
+            'is_active' => true,
+        ]);
+
+        $session = app(QueueRuntimeService::class)->currentSession();
+
+        QueueTicket::create([
+            'applicant_id' => $applicant->id,
+            'queue_session_id' => $session->id,
+            'queue_service_id' => $service->id,
+            'service_counter_id' => $counter->id,
+            'queue_date' => $session->session_date,
+            'queue_number' => 1,
+            'call_sequence' => 1000,
+            'ticket_code' => 'LMG-001',
+            'status' => QueueTicket::STATUS_WAITING,
+            'assigned_at' => now(),
+        ]);
+
+        $this->actingAs($user)
+            ->get('/dashboard')
+            ->assertOk()
+            ->assertSeeInOrder([
+                'Nomor Antrian',
+                'LMG-001',
+                'Menunggu',
+            ])
+            ->assertSee('ticket-pill-waiting', false);
     }
 
     public function test_applicant_dashboard_keeps_registration_but_blocks_queue_when_daily_quota_is_full(): void
@@ -160,6 +288,365 @@ class QueuePagesTest extends TestCase
             ->assertSet('selectedServiceId', null)
             ->assertSee('Silakan hubungi petugas atau kembali pada jadwal layanan berikutnya.')
             ->assertDontSee('Kode Manual');
+    }
+
+    public function test_applicant_dashboard_orders_services_by_queue_availability_and_dependencies(): void
+    {
+        Role::firstOrCreate(['name' => 'applicant']);
+
+        $user = User::factory()->create([
+            'email' => 'service-order-applicant@example.test',
+            'password' => 'password123',
+        ]);
+        $user->assignRole('applicant');
+
+        $applicant = Applicant::create([
+            'user_id' => $user->id,
+            'full_name' => 'Pendaftar Urutan Layanan',
+            'school_origin' => 'SMP Urutan',
+            'nisn' => '9911002200',
+            'whatsapp' => '089911002200',
+            'status' => 'registered',
+        ]);
+
+        $advancedService = QueueService::create([
+            'name' => 'Layanan Lanjutan Urutan',
+            'slug' => 'layanan-lanjutan-urutan',
+            'code' => 'LLU',
+            'sort_order' => 1,
+            'is_active' => true,
+        ]);
+
+        $requiredService = QueueService::create([
+            'name' => 'Layanan Awal Urutan',
+            'slug' => 'layanan-awal-urutan',
+            'code' => 'LAU',
+            'sort_order' => 99,
+            'is_active' => true,
+        ]);
+
+        $requiredCounter = ServiceCounter::create([
+            'queue_service_id' => $requiredService->id,
+            'name' => 'Loket Awal Urutan',
+            'code' => 'LAU-1',
+            'sort_order' => 1,
+            'is_active' => true,
+        ]);
+
+        QueueServiceDependency::create([
+            'queue_service_id' => $advancedService->id,
+            'required_queue_service_id' => $requiredService->id,
+            'required_status_mode' => QueueServiceDependency::MODE_COMPLETED,
+            'is_active' => true,
+        ]);
+
+        $this->actingAs($user)
+            ->get('/dashboard')
+            ->assertOk()
+            ->assertSeeInOrder([
+                'Layanan Awal Urutan',
+                'Layanan Lanjutan Urutan',
+            ]);
+
+        $requiredTicket = QueueTicket::create([
+            'applicant_id' => $applicant->id,
+            'queue_service_id' => $requiredService->id,
+            'service_counter_id' => $requiredCounter->id,
+            'queue_date' => today(),
+            'queue_number' => 1,
+            'call_sequence' => 1000,
+            'ticket_code' => 'LAU-001',
+            'status' => QueueTicket::STATUS_WAITING,
+            'assigned_at' => now(),
+        ]);
+
+        $this->actingAs($user)
+            ->get('/dashboard')
+            ->assertOk()
+            ->assertSeeInOrder([
+                'Layanan Awal Urutan',
+                'Layanan Lanjutan Urutan',
+            ]);
+
+        $requiredTicket->update([
+            'status' => QueueTicket::STATUS_COMPLETED,
+            'completed_at' => now(),
+        ]);
+
+        $this->actingAs($user)
+            ->get('/dashboard')
+            ->assertOk()
+            ->assertSeeInOrder([
+                'Layanan Lanjutan Urutan',
+                'Layanan Awal Urutan',
+            ]);
+    }
+
+    public function test_applicant_cannot_take_other_service_queue_until_withdrawing_active_queue(): void
+    {
+        Role::firstOrCreate(['name' => 'applicant']);
+
+        $user = User::factory()->create([
+            'email' => 'withdraw-queue-applicant@example.test',
+            'password' => 'password123',
+        ]);
+        $user->assignRole('applicant');
+
+        $applicant = Applicant::create([
+            'user_id' => $user->id,
+            'full_name' => 'Pendaftar Cabut Antrian',
+            'school_origin' => 'SMP Cabut',
+            'nisn' => '9922334411',
+            'whatsapp' => '089922334411',
+            'status' => 'registered',
+        ]);
+
+        $serviceOne = QueueService::create([
+            'name' => 'Layanan Aktif Cabut',
+            'slug' => 'layanan-aktif-cabut',
+            'code' => 'LAC',
+            'sort_order' => 1,
+            'is_active' => true,
+        ]);
+
+        $serviceTwo = QueueService::create([
+            'name' => 'Layanan Lain Cabut',
+            'slug' => 'layanan-lain-cabut',
+            'code' => 'LLC',
+            'sort_order' => 2,
+            'is_active' => true,
+        ]);
+
+        $counterOne = ServiceCounter::create([
+            'queue_service_id' => $serviceOne->id,
+            'name' => 'Loket Aktif Cabut',
+            'code' => 'LAC-1',
+            'sort_order' => 1,
+            'is_active' => true,
+        ]);
+
+        ServiceCounter::create([
+            'queue_service_id' => $serviceTwo->id,
+            'name' => 'Loket Lain Cabut',
+            'code' => 'LLC-1',
+            'sort_order' => 1,
+            'is_active' => true,
+        ]);
+
+        $session = app(QueueRuntimeService::class)->currentSession();
+
+        $activeTicket = QueueTicket::create([
+            'applicant_id' => $applicant->id,
+            'queue_session_id' => $session->id,
+            'queue_service_id' => $serviceOne->id,
+            'service_counter_id' => $counterOne->id,
+            'queue_date' => $session->session_date,
+            'queue_number' => 1,
+            'call_sequence' => 1000,
+            'ticket_code' => 'LAC-001',
+            'status' => QueueTicket::STATUS_WAITING,
+            'assigned_at' => now(),
+        ]);
+
+        $this->actingAs($user)
+            ->get('/dashboard')
+            ->assertOk()
+            ->assertSee('Cabut Antrian')
+            ->assertSee('btn-soft-disabled')
+            ->assertSee('aria-disabled="true"', false)
+            ->assertSee('Anda sedang mengantri di layanan Layanan Aktif Cabut. Silakan selesaikan dahulu sebelum mengambil antrian layanan lain.');
+
+        $component = Livewire::actingAs($user)
+            ->test(ApplicantDashboard::class)
+            ->call('openQueueScanner', $serviceTwo->id)
+            ->assertSet('selectedServiceId', null)
+            ->assertSet('blockedTooltipTicketId', $activeTicket->id)
+            ->assertSee('blocked-tooltip')
+            ->assertSee('Anda sedang mengantri di layanan Layanan Aktif Cabut. Silakan selesaikan dahulu sebelum mengambil antrian layanan lain.')
+            ->call('openWithdrawQueueModal', $activeTicket->id)
+            ->assertSet('withdrawingTicketId', $activeTicket->id)
+            ->assertSee('Cabut Antrian?')
+            ->call('withdrawQueue')
+            ->assertSet('withdrawingTicketId', null)
+            ->assertSee('berhasil dicabut');
+
+        $this->assertSame(QueueTicket::STATUS_CANCELLED, $activeTicket->refresh()->status);
+        $this->assertNotNull($activeTicket->cancelled_at);
+
+        $otherUser = User::factory()->create(['email' => 'withdraw-queue-other@example.test']);
+        $otherApplicant = Applicant::create([
+            'user_id' => $otherUser->id,
+            'full_name' => 'Pendaftar Lain Cabut',
+            'school_origin' => 'SMP Cabut',
+            'nisn' => '9922334412',
+            'whatsapp' => '089922334412',
+            'status' => 'registered',
+        ]);
+
+        QueueTicket::create([
+            'applicant_id' => $otherApplicant->id,
+            'queue_session_id' => $session->id,
+            'queue_service_id' => $serviceOne->id,
+            'service_counter_id' => $counterOne->id,
+            'queue_date' => $session->session_date,
+            'queue_number' => 2,
+            'call_sequence' => 2000,
+            'ticket_code' => 'LAC-002',
+            'status' => QueueTicket::STATUS_WAITING,
+            'assigned_at' => now()->addMinute(),
+        ]);
+
+        $qr = app(QueueRuntimeService::class)->createCheckInQr();
+
+        $component
+            ->call('openQueueScanner', $serviceOne->id)
+            ->assertSet('selectedServiceId', $serviceOne->id)
+            ->set('queue_code', $qr['manualCode'])
+            ->call('claimSelectedService')
+            ->assertRedirect(route('dashboard'));
+
+        $this->assertDatabaseHas('queue_tickets', [
+            'applicant_id' => $applicant->id,
+            'queue_service_id' => $serviceOne->id,
+            'queue_number' => 3,
+            'ticket_code' => 'LAC-003',
+            'status' => QueueTicket::STATUS_WAITING,
+        ]);
+    }
+
+    public function test_previous_day_active_ticket_does_not_lock_today_applicant_dashboard(): void
+    {
+        Role::firstOrCreate(['name' => 'applicant']);
+
+        $user = User::factory()->create([
+            'email' => 'previous-day-ticket@example.test',
+            'password' => 'password123',
+        ]);
+        $user->assignRole('applicant');
+
+        $applicant = Applicant::create([
+            'user_id' => $user->id,
+            'full_name' => 'Pendaftar Tiket Kemarin',
+            'school_origin' => 'SMP Kemarin',
+            'nisn' => '9933445566',
+            'whatsapp' => '089933445566',
+            'status' => 'registered',
+        ]);
+
+        $service = QueueService::create([
+            'name' => 'Layanan Hari Baru',
+            'slug' => 'layanan-hari-baru',
+            'code' => 'LHB',
+            'sort_order' => 1,
+            'is_active' => true,
+        ]);
+
+        ServiceCounter::create([
+            'queue_service_id' => $service->id,
+            'name' => 'Loket Hari Baru',
+            'code' => 'LHB-1',
+            'sort_order' => 1,
+            'is_active' => true,
+        ]);
+
+        $todaySession = app(QueueRuntimeService::class)->currentSession();
+        $yesterdaySession = QueueSession::create([
+            'name' => 'Antrian Kemarin',
+            'session_date' => today()->subDay(),
+            'starts_at' => today()->subDay()->startOfDay(),
+            'ends_at' => today()->subDay()->endOfDay(),
+            'is_active' => true,
+        ]);
+
+        QueueTicket::create([
+            'applicant_id' => $applicant->id,
+            'queue_session_id' => $yesterdaySession->id,
+            'queue_service_id' => $service->id,
+            'queue_date' => $yesterdaySession->session_date,
+            'queue_number' => 1,
+            'call_sequence' => 1000,
+            'ticket_code' => 'LHB-OLD',
+            'status' => QueueTicket::STATUS_CALLED,
+            'assigned_at' => now()->subDay(),
+            'called_at' => now()->subDay(),
+        ]);
+
+        $this->actingAs($user)
+            ->get('/dashboard')
+            ->assertOk()
+            ->assertSeeInOrder([
+                'Layanan Hari Baru',
+                'Belum Mengantri',
+                'Ambil Antrian',
+            ])
+            ->assertDontSee('Antrian ini tidak bisa dicabut');
+
+        Livewire::actingAs($user)
+            ->test(ApplicantDashboard::class)
+            ->call('openQueueScanner', $service->id)
+            ->assertSet('selectedServiceId', $service->id)
+            ->assertSet('blockedTooltipTicketId', null);
+
+        $this->assertSame($todaySession->id, app(QueueRuntimeService::class)->currentSession()->id);
+    }
+
+    public function test_previous_day_queue_code_is_not_valid_after_date_changes(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-06-14 23:30:00', config('app.timezone')));
+
+        try {
+            Role::firstOrCreate(['name' => 'applicant']);
+
+            $user = User::factory()->create([
+                'email' => 'old-qr-applicant@example.test',
+                'password' => 'password123',
+            ]);
+            $user->assignRole('applicant');
+
+            Applicant::create([
+                'user_id' => $user->id,
+                'full_name' => 'Pendaftar QR Lama',
+                'school_origin' => 'SMP QR',
+                'nisn' => '9933445577',
+                'whatsapp' => '089933445577',
+                'status' => 'registered',
+            ]);
+
+            $service = QueueService::create([
+                'name' => 'Layanan QR Lama',
+                'slug' => 'layanan-qr-lama',
+                'code' => 'LQL',
+                'sort_order' => 1,
+                'is_active' => true,
+            ]);
+
+            ServiceCounter::create([
+                'queue_service_id' => $service->id,
+                'name' => 'Loket QR Lama',
+                'code' => 'LQL-1',
+                'sort_order' => 1,
+                'is_active' => true,
+            ]);
+
+            $qr = app(QueueRuntimeService::class)->createCheckInQr(expiresAt: now()->addHours(2));
+
+            Carbon::setTestNow(Carbon::parse('2026-06-15 00:10:00', config('app.timezone')));
+
+            Livewire::actingAs($user)
+                ->test(ApplicantDashboard::class)
+                ->call('openQueueScanner', $service->id)
+                ->set('queue_code', $qr['manualCode'])
+                ->call('claimSelectedService')
+                ->assertHasErrors(['queue_code'])
+                ->assertSee('QR atau kode ambil antrian tidak valid atau sudah kedaluwarsa.');
+
+            $this->assertDatabaseMissing('queue_tickets', [
+                'queue_service_id' => $service->id,
+                'ticket_code' => 'LQL-001',
+            ]);
+        } finally {
+            Carbon::setTestNow();
+        }
     }
 
     public function test_officer_console_is_available_to_officer(): void
@@ -604,6 +1091,8 @@ class QueuePagesTest extends TestCase
         $response->assertOk();
         $response->assertSee('Dashboard Petugas');
         $response->assertSee('Download QR');
+        $response->assertSee('manual-code-card', false);
+        $response->assertSee('manual-code-digit', false);
         $response->assertSee(route('officer.queue-qr.print'), false);
 
         $response = $this->actingAs($officer)->get(route('officer.queue-qr.print'));
@@ -619,6 +1108,69 @@ class QueuePagesTest extends TestCase
         $response->assertSee(route('queue.check-in', ['token' => $qr['manualCode']]), false);
         $response->assertDontSee('class="app-header"', false);
         $response->assertDontSee('class="bottom-nav"', false);
+    }
+
+    public function test_officer_dashboard_hides_inactive_queue_qr_code(): void
+    {
+        $this->seed();
+
+        $officer = User::where('email', 'petugas@example.test')->firstOrFail();
+        $qr = app(QueueRuntimeService::class)->createCheckInQr($officer, expiresAt: AppClock::now()->subMinute());
+
+        $response = $this->actingAs($officer)->get('/petugas');
+
+        $response->assertOk();
+        $response->assertSee('Belum ada QR/kode aktif atau masa berlakunya sudah habis.');
+        $response->assertDontSee($qr['manualCode']);
+        $response->assertDontSee('Download QR');
+        $response->assertDontSee(route('officer.queue-qr.print'), false);
+    }
+
+    public function test_queue_qr_default_expiry_is_capped_at_2300_same_day(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-06-15 08:00:00', AppClock::timezone()));
+
+        try {
+            $qr = app(QueueRuntimeService::class)->createCheckInQr();
+
+            $this->assertSame(
+                '2026-06-15 23:00:00',
+                $qr['qrCode']->expires_at->copy()->timezone(AppClock::timezone())->format('Y-m-d H:i:s'),
+            );
+
+            AppSetting::putValue('queue.qr_expiry_limit_enabled', true, [
+                'group' => 'queue',
+                'label' => 'Aktifkan Batas Durasi QR dan Kode Manual',
+                'type' => AppSetting::TYPE_BOOLEAN,
+                'is_public' => false,
+                'sort_order' => 4,
+            ]);
+
+            AppSetting::putValue('queue.qr_expiry_limit_hours', 3, [
+                'group' => 'queue',
+                'label' => 'Batas Durasi QR dan Kode Manual Dalam Jam',
+                'type' => AppSetting::TYPE_INTEGER,
+                'is_public' => false,
+                'sort_order' => 5,
+            ]);
+
+            $limitedQr = app(QueueRuntimeService::class)->createCheckInQr();
+
+            $this->assertSame(
+                '2026-06-15 11:00:00',
+                $limitedQr['qrCode']->expires_at->copy()->timezone(AppClock::timezone())->format('Y-m-d H:i:s'),
+            );
+
+            Carbon::setTestNow(Carbon::parse('2026-06-15 22:30:00', AppClock::timezone()));
+            $lateQr = app(QueueRuntimeService::class)->createCheckInQr();
+
+            $this->assertSame(
+                '2026-06-15 23:00:00',
+                $lateQr['qrCode']->expires_at->copy()->timezone(AppClock::timezone())->format('Y-m-d H:i:s'),
+            );
+        } finally {
+            Carbon::setTestNow();
+        }
     }
 
     public function test_queue_qr_generation_requires_manual_officer_permission(): void
@@ -665,6 +1217,8 @@ class QueuePagesTest extends TestCase
             ->test(OfficerQueueConsole::class)
             ->assertSee('Buat/Ganti QR & Kode', false)
             ->call('generateCheckInQr')
+            ->assertSee('Kode Manual Baru')
+            ->assertSee('manual-code-digit', false)
             ->assertHasNoErrors();
 
         $this->assertNotEmpty($component->get('generatedCheckInCode'));
@@ -728,6 +1282,8 @@ class QueuePagesTest extends TestCase
         $this->assertSame('Asia/Jakarta', AppSetting::getValue('app.timezone'));
         $this->assertTrue(AppSetting::getValue('queue.daily_quota_enabled'));
         $this->assertSame(200, AppSetting::getValue('queue.daily_quota_limit'));
+        $this->assertFalse(AppSetting::getValue('queue.qr_expiry_limit_enabled'));
+        $this->assertSame(2, AppSetting::getValue('queue.qr_expiry_limit_hours'));
 
         $this->assertTrue(Role::findByName('Petugas')->hasPermissionTo('petugas.konsol_antrian'));
         $this->assertFalse(Role::findByName('Petugas')->hasPermissionTo('petugas.kelola_qr_antrian'));
@@ -779,6 +1335,18 @@ class QueuePagesTest extends TestCase
         $this->assertSame(1, QueueSession::count());
         $this->assertSame(2, ServiceDailyQuota::count());
         $this->assertSame(4, CounterDailyAllocation::count());
+
+        config(['seed.sync_mode' => 'add_only']);
+        $verification->update(['name' => 'Verifikasi Operator']);
+        ServiceCounter::where('code', 'VB-1')->update(['name' => 'Loket Operator']);
+        $this->seed();
+        $this->assertSame('Verifikasi Operator', QueueService::where('slug', 'verifikasi-berkas')->value('name'));
+        $this->assertSame('Loket Operator', ServiceCounter::where('code', 'VB-1')->value('name'));
+
+        config(['seed.sync_mode' => 'sync']);
+        $this->seed();
+        $this->assertSame('Verifikasi Berkas', QueueService::where('slug', 'verifikasi-berkas')->value('name'));
+        $this->assertSame('Loket Verifikasi 1', ServiceCounter::where('code', 'VB-1')->value('name'));
 
         $response = $this->actingAs($superAdmin)->get('/petugas');
 
@@ -1154,6 +1722,8 @@ class QueuePagesTest extends TestCase
             ->set('defaultServiceMinutes', 12)
             ->set('dailyQuotaEnabled', true)
             ->set('dailyQuotaLimit', 150)
+            ->set('qrExpiryLimitEnabled', true)
+            ->set('qrExpiryLimitHours', 3)
             ->call('save')
             ->assertHasNoErrors();
 
@@ -1168,6 +1738,8 @@ class QueuePagesTest extends TestCase
         $this->assertSame(12, AppSetting::getValue('queue.default_service_minutes'));
         $this->assertTrue(AppSetting::getValue('queue.daily_quota_enabled'));
         $this->assertSame(150, AppSetting::getValue('queue.daily_quota_limit'));
+        $this->assertTrue(AppSetting::getValue('queue.qr_expiry_limit_enabled'));
+        $this->assertSame(3, AppSetting::getValue('queue.qr_expiry_limit_hours'));
 
         $this->assertDatabaseHas('service_daily_quotas', [
             'max_daily_quota' => 150,
@@ -1669,12 +2241,14 @@ class QueuePagesTest extends TestCase
         $qr = app(QueueRuntimeService::class)->createCheckInQr();
 
         $this->assertNotEmpty($qr['manualCode']);
-        $this->assertTrue($qr['qrCode']->expires_at->greaterThan(now()->addMinutes(119)));
-        $this->assertTrue($qr['qrCode']->expires_at->lessThan(now()->addMinutes(121)));
+        $this->assertTrue($qr['qrCode']->expires_at->lessThanOrEqualTo(AppClock::now()->setTime(23, 0)));
 
         Livewire::actingAs($user)
             ->test(ApplicantDashboard::class)
             ->call('openQueueScanner', $service->id)
+            ->assertSee('queue-scanner-content', false)
+            ->assertSee('queue-manual-panel', false)
+            ->assertSee('Kode Manual')
             ->set('queue_code', $qr['manualCode'])
             ->call('claimSelectedService')
             ->assertRedirect(route('dashboard'));

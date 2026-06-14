@@ -311,7 +311,7 @@
 
         <div class="field">
             <label for="appTimezone">Zona Waktu Aplikasi</label>
-            <select id="appTimezone" class="select" wire:model="appTimezone">
+            <select id="appTimezone" class="select" wire:model="appTimezone" data-autocomplete-select data-autocomplete-placeholder="Cari zona waktu">
                 @foreach($timezoneOptions as $timezone => $label)
                     <option value="{{ $timezone }}">{{ $label }}</option>
                 @endforeach
@@ -342,6 +342,26 @@
                 <input id="dailyQuotaLimit" class="input" type="number" min="1" max="100000" wire:model="dailyQuotaLimit">
                 <div class="muted" style="font-size: 12px;">Angka ini menjadi batas harian untuk setiap layanan aktif pada sesi berjalan.</div>
                 @error('dailyQuotaLimit') <span class="error">{{ $message }}</span> @enderror
+            </div>
+        @endif
+
+        <div class="settings-switch-row">
+            <div>
+                <strong>Batasi Durasi QR & Kode</strong>
+                <span>Jika nonaktif, QR dan kode manual berlaku sampai pukul 23.00 pada hari yang sama.</span>
+            </div>
+            <label class="switch" aria-label="Batasi Durasi QR dan Kode">
+                <input type="checkbox" wire:model.live="qrExpiryLimitEnabled">
+                <span class="switch-track"></span>
+            </label>
+        </div>
+
+        @if($qrExpiryLimitEnabled)
+            <div class="field">
+                <label for="qrExpiryLimitHours">Masa Berlaku QR & Kode (Jam)</label>
+                <input id="qrExpiryLimitHours" class="input" type="number" min="1" max="24" wire:model="qrExpiryLimitHours">
+                <div class="muted" style="font-size: 12px;">Tetap tunduk batas maksimal harian pukul 23.00. Contoh: dibuat 22.30 dengan batas 2 jam, sistem hanya berlaku sampai 23.00.</div>
+                @error('qrExpiryLimitHours') <span class="error">{{ $message }}</span> @enderror
             </div>
         @endif
     </section>

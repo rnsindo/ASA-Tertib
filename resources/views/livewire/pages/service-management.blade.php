@@ -446,7 +446,7 @@
                         <div class="dependency-box">
                             <div class="field">
                                 <label for="requiredServiceId">Layanan Prasyarat</label>
-                                <select id="requiredServiceId" class="select" wire:model="requiredServiceId">
+                                <select id="requiredServiceId" class="select" wire:model="requiredServiceId" data-autocomplete-select data-autocomplete-placeholder="Cari layanan prasyarat">
                                     <option value="">Pilih layanan prasyarat</option>
                                     @foreach($serviceOptions as $option)
                                         <option value="{{ $option->id }}" @disabled($editingServiceId && $editingServiceId === $option->id)>
@@ -459,7 +459,7 @@
 
                             <div class="field">
                                 <label for="requiredStatusMode">Syarat Status Layanan Prasyarat</label>
-                                <select id="requiredStatusMode" class="select" wire:model="requiredStatusMode">
+                                <select id="requiredStatusMode" class="select" wire:model="requiredStatusMode" data-autocomplete-select data-autocomplete-placeholder="Cari status prasyarat">
                                     @foreach($dependencyModes as $mode => $label)
                                         <option value="{{ $mode }}">{{ ucfirst($label) }}</option>
                                     @endforeach
@@ -605,7 +605,7 @@
 
                     <div class="field">
                         <label for="counterOfficerId">Petugas Loket</label>
-                        <select id="counterOfficerId" class="select" wire:model="counterOfficerId">
+                        <select id="counterOfficerId" class="select" wire:model="counterOfficerId" data-autocomplete-select data-autocomplete-placeholder="Cari petugas loket">
                             <option value="">Belum ditentukan</option>
                             @foreach($officerUsers as $officer)
                                 <option value="{{ $officer->id }}">{{ $officer->name }} - {{ $officer->email }}</option>

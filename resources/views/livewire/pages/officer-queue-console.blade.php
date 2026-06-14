@@ -58,6 +58,57 @@
             border-radius: 8px;
             background: #f8fbff;
         }
+        .manual-code-card {
+            display: grid;
+            gap: 8px;
+            margin-top: 10px;
+            padding: 12px;
+            border: 1px solid #fbbf24;
+            border-radius: 8px;
+            background: linear-gradient(180deg, #fff7cc 0%, #fffbeb 100%);
+            box-shadow: 0 12px 26px rgba(245, 158, 11, .16);
+        }
+        .manual-code-card span {
+            color: #92400e;
+            font-size: 11px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0;
+        }
+        .manual-code-otp {
+            display: flex;
+            flex-wrap: nowrap;
+            gap: 8px;
+            align-items: center;
+            width: 100%;
+            overflow: hidden;
+        }
+        .manual-code-digit {
+            flex: 0 1 38px;
+            width: 38px;
+            min-width: 0;
+            min-height: 44px;
+            display: grid;
+            place-items: center;
+            border: 1px solid #93c5fd;
+            border-radius: 8px;
+            background: #fff;
+            color: #0f3d7a;
+            font-size: 20px;
+            font-weight: 900;
+            line-height: 1;
+            box-shadow: inset 0 -3px 0 rgba(37, 99, 235, .08), 0 8px 18px rgba(146, 64, 14, .12);
+        }
+        @media (max-width: 380px) {
+            .manual-code-otp { gap: 5px; }
+            .manual-code-digit {
+                flex-basis: 32px;
+                width: 32px;
+                min-height: 38px;
+                border-radius: 7px;
+                font-size: 18px;
+            }
+        }
         .btn-counter-open {
             background: #f97316;
             border-color: #ea580c;
@@ -489,14 +540,23 @@
                 <div>
                     <strong>QR & Kode Ambil Antrian</strong>
                     <div class="muted">
-                        Sesi {{ $currentSession->name }}.
+                        Sesi {{ $currentSession->name }}.<br>
                         @if($activeQrCode)
                             QR aktif sampai {{ $activeQrCode->expires_at ? \App\Support\AppClock::format($activeQrCode->expires_at, 'd/m/Y H:i') : 'tanpa batas waktu' }}.
-                            Kode manual: <strong>{{ $activeQrCode->manual_code ?? '-' }}</strong>.
                         @else
                             Belum ada QR/kode aktif atau masa berlakunya sudah habis.
                         @endif
                     </div>
+                    @if($activeQrCode?->manual_code)
+                        <div class="manual-code-card" aria-label="Kode manual {{ $activeQrCode->manual_code }}">
+                            <span>Kode Manual</span>
+                            <div class="manual-code-otp">
+                                @foreach(str_split($activeQrCode->manual_code) as $character)
+                                    <strong class="manual-code-digit">{{ $character }}</strong>
+                                @endforeach
+                            </div>
+                        </div>
+                    @endif
                 </div>
                 <div class="button-row">
                     @if($activeQrCode)
@@ -510,19 +570,23 @@
                             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h3v3h-3zM18 18h3v3h-3zM18 14h3"/></svg>
                             Buat/Ganti QR & Kode
                         </button>
-                    @else
-                        <div class="muted" style="max-width: 220px; text-align: right;">
-                            Hanya petugas tertentu yang dapat membuat atau mengganti QR & kode.
-                        </div>
                     @endif
                 </div>
             </div>
 
-            @if($generatedCheckInUrl)
+            @if($generatedCheckInUrl && $activeQrCode?->manual_code === $generatedCheckInCode)
                 <div class="field">
                     <label for="generatedCheckInUrl">Link QR aktif yang baru dibuat</label>
                     <input id="generatedCheckInUrl" class="input" type="text" value="{{ $generatedCheckInUrl }}" readonly>
-                    <div class="muted">Kode manual: <strong>{{ $generatedCheckInCode }}</strong>. Berlaku sampai {{ $generatedCheckInExpiresAt ?? '2 jam dari sekarang' }}.</div>
+                    <div class="manual-code-card" aria-label="Kode manual baru {{ $generatedCheckInCode }}">
+                        <span>Kode Manual Baru</span>
+                        <div class="manual-code-otp">
+                            @foreach(str_split((string) $generatedCheckInCode) as $character)
+                                <strong class="manual-code-digit">{{ $character }}</strong>
+                            @endforeach
+                        </div>
+                    </div>
+                    <div class="muted">Berlaku sampai {{ $generatedCheckInExpiresAt ?? '2 jam dari sekarang' }}.</div>
                 </div>
             @endif
         </section>
@@ -757,7 +821,7 @@
 
                     <div class="field">
                         <label for="assigningServiceId">Pilih Layanan</label>
-                        <select id="assigningServiceId" class="select" wire:model.live="assigningServiceId">
+                        <select id="assigningServiceId" class="select" wire:model.live="assigningServiceId" data-autocomplete-select data-autocomplete-placeholder="Cari layanan">
                             <option value="">Pilih layanan yang akan diambil</option>
                             @foreach($assignmentServices as $service)
                                 @php($status = $assignmentServiceStatuses->get($service->id))
@@ -827,7 +891,7 @@
 
                     <div class="field">
                         <label for="transferTargetCounterId">Pilih Loket Tujuan</label>
-                        <select id="transferTargetCounterId" class="select" wire:model="transferTargetCounterId">
+                        <select id="transferTargetCounterId" class="select" wire:model="transferTargetCounterId" data-autocomplete-select data-autocomplete-placeholder="Cari loket tujuan">
                             <option value="">Pilih loket tujuan</option>
                             @foreach($transferCounters as $counter)
                                 <option value="{{ $counter->id }}" @disabled($transferTicket->service_counter_id === $counter->id)>

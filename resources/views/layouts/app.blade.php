@@ -303,6 +303,105 @@
         .input[readonly] { background: #eef3f8; }
         .error { color: var(--danger); font-size: 12px; }
 
+        .autocomplete-source {
+            position: absolute !important;
+            width: 1px !important;
+            height: 1px !important;
+            opacity: 0 !important;
+            pointer-events: none !important;
+        }
+
+        .autocomplete-box {
+            position: relative;
+            width: 100%;
+        }
+
+        .autocomplete-control {
+            position: relative;
+        }
+
+        .autocomplete-input {
+            padding-right: 42px;
+        }
+
+        .autocomplete-toggle {
+            position: absolute;
+            right: 8px;
+            top: 50%;
+            width: 30px;
+            height: 30px;
+            transform: translateY(-50%);
+            display: grid;
+            place-items: center;
+            border: 0;
+            border-radius: 8px;
+            background: transparent;
+            color: var(--muted);
+            cursor: pointer;
+        }
+
+        .autocomplete-toggle svg {
+            width: 17px;
+            height: 17px;
+            fill: none;
+            stroke: currentColor;
+            stroke-width: 2;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+
+        .autocomplete-list {
+            position: absolute;
+            left: 0;
+            right: 0;
+            top: calc(100% + 6px);
+            z-index: 120;
+            display: none;
+            max-height: 246px;
+            overflow-y: auto;
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            background: #fff;
+            box-shadow: 0 18px 44px rgba(15, 23, 42, .18);
+            padding: 6px;
+        }
+
+        .autocomplete-box.is-open .autocomplete-list {
+            display: grid;
+            gap: 4px;
+        }
+
+        .autocomplete-option {
+            width: 100%;
+            border: 0;
+            border-radius: 8px;
+            padding: 9px 10px;
+            background: #fff;
+            color: var(--ink);
+            font: inherit;
+            text-align: left;
+            cursor: pointer;
+        }
+
+        .autocomplete-option:hover,
+        .autocomplete-option.is-selected {
+            background: var(--primary-soft);
+            color: var(--primary-deep);
+        }
+
+        .autocomplete-option.is-disabled {
+            cursor: not-allowed;
+            color: var(--muted);
+            background: #f1f5f9;
+        }
+
+        .autocomplete-empty {
+            padding: 10px;
+            color: var(--muted);
+            font-size: 13px;
+            text-align: center;
+        }
+
         .alert {
             border-radius: 8px;
             padding: 12px;
@@ -940,5 +1039,224 @@
         </script>
     @endauth
     @livewireScripts
+    <script>
+        (() => {
+            const maxVisibleDefault = 5;
+
+            const normalize = (value) => (value || '').toString().trim().toLowerCase();
+
+            const visibleOptions = (select, query, limit) => {
+                const selectedValue = select.value;
+                const items = Array.from(select.options).map((option) => ({
+                    value: option.value,
+                    label: option.textContent.trim(),
+                    disabled: option.disabled,
+                    selected: option.value === selectedValue,
+                }));
+                const search = normalize(query);
+
+                return items
+                    .filter((item) => ! search || normalize(item.label).includes(search))
+                    .slice(0, limit);
+            };
+
+            const selectedLabel = (select) => {
+                const selected = select.options[select.selectedIndex];
+
+                if (selected) {
+                    return selected.textContent.trim();
+                }
+
+                const placeholder = select.dataset.autocompletePlaceholder || 'Pilih data';
+
+                return placeholder;
+            };
+
+            const syncSelectValue = (select, value) => {
+                select.value = value;
+                select.dispatchEvent(new Event('input', { bubbles: true }));
+                select.dispatchEvent(new Event('change', { bubbles: true }));
+            };
+
+            const closeOtherAutocompletes = (current) => {
+                document.querySelectorAll('.autocomplete-box.is-open').forEach((box) => {
+                    if (box !== current) {
+                        box.classList.remove('is-open');
+                    }
+                });
+            };
+
+            const renderOptions = (select, box) => {
+                const list = box.querySelector('.autocomplete-list');
+                const input = box.querySelector('.autocomplete-input');
+                const limit = Number.parseInt(select.dataset.autocompleteLimit || maxVisibleDefault, 10);
+                const options = visibleOptions(select, input.value, Number.isFinite(limit) && limit > 0 ? limit : maxVisibleDefault);
+
+                list.innerHTML = '';
+
+                if (options.length === 0) {
+                    const empty = document.createElement('div');
+                    empty.className = 'autocomplete-empty';
+                    empty.textContent = 'Data tidak ditemukan';
+                    list.appendChild(empty);
+                    return;
+                }
+
+                options.forEach((item) => {
+                    const button = document.createElement('button');
+                    button.type = 'button';
+                    button.className = 'autocomplete-option';
+                    button.textContent = item.label;
+                    button.setAttribute('role', 'option');
+                    button.setAttribute('aria-selected', item.selected ? 'true' : 'false');
+
+                    if (item.selected) {
+                        button.classList.add('is-selected');
+                    }
+
+                    if (item.disabled) {
+                        button.classList.add('is-disabled');
+                        button.disabled = true;
+                    }
+
+                    button.addEventListener('click', () => {
+                        if (item.disabled) {
+                            return;
+                        }
+
+                        syncSelectValue(select, item.value);
+                        input.value = item.label;
+                        box.classList.remove('is-open');
+                    });
+
+                    list.appendChild(button);
+                });
+            };
+
+            const initAutocompleteSelect = (select) => {
+                if (! select || select.dataset.autocompleteReady === '1') {
+                    return;
+                }
+
+                select.dataset.autocompleteReady = '1';
+                select.classList.add('autocomplete-source');
+
+                const box = document.createElement('div');
+                box.className = 'autocomplete-box';
+                box.setAttribute('data-autocomplete-box', select.id || '');
+
+                const control = document.createElement('div');
+                control.className = 'autocomplete-control';
+
+                const input = document.createElement('input');
+                input.type = 'search';
+                input.className = 'input autocomplete-input';
+                input.autocomplete = 'off';
+                input.placeholder = select.dataset.autocompletePlaceholder || 'Cari dan pilih data';
+                input.value = selectedLabel(select);
+                input.setAttribute('aria-label', select.dataset.autocompleteLabel || input.placeholder);
+                input.setAttribute('aria-haspopup', 'listbox');
+
+                const toggle = document.createElement('button');
+                toggle.type = 'button';
+                toggle.className = 'autocomplete-toggle';
+                toggle.setAttribute('aria-label', 'Buka pilihan');
+                toggle.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>';
+
+                const list = document.createElement('div');
+                list.className = 'autocomplete-list';
+                list.setAttribute('role', 'listbox');
+
+                control.appendChild(input);
+                control.appendChild(toggle);
+                box.appendChild(control);
+                box.appendChild(list);
+                select.insertAdjacentElement('afterend', box);
+
+                const open = () => {
+                    closeOtherAutocompletes(box);
+                    box.classList.add('is-open');
+                    renderOptions(select, box);
+                };
+
+                input.addEventListener('focus', () => {
+                    input.select();
+                    open();
+                });
+
+                input.addEventListener('input', open);
+
+                toggle.addEventListener('click', () => {
+                    if (box.classList.contains('is-open')) {
+                        box.classList.remove('is-open');
+                        return;
+                    }
+
+                    input.focus();
+                    open();
+                });
+
+                select.addEventListener('change', () => {
+                    input.value = selectedLabel(select);
+                    renderOptions(select, box);
+                });
+            };
+
+            const refreshAutocompleteSelect = (select) => {
+                const box = select.nextElementSibling?.matches?.('.autocomplete-box')
+                    ? select.nextElementSibling
+                    : null;
+
+                if (! box) {
+                    select.dataset.autocompleteReady = '';
+                    initAutocompleteSelect(select);
+                    return;
+                }
+
+                const input = box.querySelector('.autocomplete-input');
+                if (input && ! box.classList.contains('is-open')) {
+                    input.value = selectedLabel(select);
+                }
+            };
+
+            const initAutocompleteSelects = (root = document) => {
+                root.querySelectorAll?.('select[data-autocomplete-select]').forEach((select) => {
+                    if (select.dataset.autocompleteReady === '1') {
+                        refreshAutocompleteSelect(select);
+                    } else {
+                        initAutocompleteSelect(select);
+                    }
+                });
+            };
+
+            document.addEventListener('click', (event) => {
+                if (! event.target.closest('.autocomplete-box')) {
+                    closeOtherAutocompletes(null);
+                }
+            });
+
+            document.addEventListener('DOMContentLoaded', () => initAutocompleteSelects());
+            document.addEventListener('livewire:navigated', () => initAutocompleteSelects());
+            document.addEventListener('livewire:init', () => {
+                if (window.Livewire?.hook) {
+                    window.Livewire.hook('morph.updated', () => {
+                        window.requestAnimationFrame(() => initAutocompleteSelects());
+                    });
+                }
+            });
+
+            const observer = new MutationObserver(() => {
+                window.requestAnimationFrame(() => initAutocompleteSelects());
+            });
+
+            if (document.body) {
+                observer.observe(document.body, { childList: true, subtree: true });
+            } else {
+                document.addEventListener('DOMContentLoaded', () => {
+                    observer.observe(document.body, { childList: true, subtree: true });
+                });
+            }
+        })();
+    </script>
 </body>
 </html>

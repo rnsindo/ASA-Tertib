@@ -15,6 +15,7 @@ use App\Models\QueueTicket;
 use App\Models\ServiceCounter;
 use App\Models\ServiceDailyQuota;
 use App\Models\User;
+use App\Support\AppClock;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -47,8 +48,10 @@ class QueueRuntimeService
         $session = $this->currentSession();
         $token = Str::random(56);
         $manualCode = $this->generateManualCode();
+        $now = AppClock::now();
+        $expiresAt = $this->resolveCheckInQrExpiresAt($expiresAt);
 
-        return DB::transaction(function () use ($session, $creator, $expiresAt, $label, $token, $manualCode): array {
+        return DB::transaction(function () use ($session, $creator, $expiresAt, $label, $token, $manualCode, $now): array {
             QueueSessionQrCode::query()
                 ->where('queue_session_id', $session->id)
                 ->where('is_active', true)
@@ -62,9 +65,9 @@ class QueueRuntimeService
                 'queue_session_id' => $session->id,
                 'token_hash' => $this->hashToken($token),
                 'manual_code' => $manualCode,
-                'label' => $label ?: 'QR Ambil Antrian ' . now()->format('d/m/Y H:i'),
-                'starts_at' => now(),
-                'expires_at' => $expiresAt ?: now()->addHours(2),
+                'label' => $label ?: 'QR Ambil Antrian ' . AppClock::format($now, 'd/m/Y H:i'),
+                'starts_at' => $now,
+                'expires_at' => $expiresAt,
                 'is_active' => true,
                 'created_by' => $creator?->id,
             ]);
@@ -76,6 +79,26 @@ class QueueRuntimeService
                 'url' => route('queue.check-in', ['token' => $token]),
             ];
         });
+    }
+
+    private function resolveCheckInQrExpiresAt(?Carbon $expiresAt = null): Carbon
+    {
+        $now = AppClock::now();
+        $sameDayLimit = $now->copy()->setTime(23, 0, 0);
+
+        if ($expiresAt) {
+            $candidate = $expiresAt->copy()->timezone(AppClock::timezone());
+        } elseif ($this->qrExpiryLimitEnabled()) {
+            $candidate = $now->copy()->addHours($this->qrExpiryLimitHours());
+        } else {
+            $candidate = $sameDayLimit;
+        }
+
+        if (! $candidate->isSameDay($now) || $candidate->greaterThan($sameDayLimit)) {
+            return $sameDayLimit;
+        }
+
+        return $candidate;
     }
 
     public function checkInWithQr(User $user, string $token): array
@@ -323,6 +346,26 @@ class QueueRuntimeService
             return [false, 'Pendaftar ini masih punya antrian aktif atau terlewat pada layanan yang sama.'];
         }
 
+        $otherActiveTicket = QueueTicket::query()
+            ->with('service')
+            ->where('applicant_id', $applicant->id)
+            ->where('queue_service_id', '!=', $service->id)
+            ->whereDate('queue_date', $session->session_date)
+            ->when($ignoreTicketId, fn ($query) => $query->whereKeyNot($ignoreTicketId))
+            ->whereIn('status', [
+                QueueTicket::STATUS_WAITING,
+                QueueTicket::STATUS_CALLED,
+                QueueTicket::STATUS_IN_PROGRESS,
+                QueueTicket::STATUS_NO_SHOW,
+            ])
+            ->latest('assigned_at')
+            ->latest('id')
+            ->first();
+
+        if ($otherActiveTicket) {
+            return [false, 'Anda masih memiliki antrian aktif atau terlewat di layanan ' . ($otherActiveTicket->service?->name ?? 'lain') . '. Silakan selesaikan dahulu sebelum mengambil antrian layanan lain.'];
+        }
+
         $quotaStatus = $this->quotaStatus($service, $session);
 
         if ($quotaStatus['is_full']) {
@@ -448,6 +491,10 @@ class QueueRuntimeService
             return false;
         }
 
+        if (! $qrCode->session->session_date?->isSameDay(AppClock::now())) {
+            return false;
+        }
+
         if ($qrCode->starts_at && $qrCode->starts_at->gt($now)) {
             return false;
         }
@@ -566,5 +613,15 @@ class QueueRuntimeService
     private function defaultDailyQuotaLimit(): int
     {
         return max(1, (int) AppSetting::getValue('queue.daily_quota_limit', 200));
+    }
+
+    private function qrExpiryLimitEnabled(): bool
+    {
+        return (bool) AppSetting::getValue('queue.qr_expiry_limit_enabled', false);
+    }
+
+    private function qrExpiryLimitHours(): int
+    {
+        return max(1, min(24, (int) AppSetting::getValue('queue.qr_expiry_limit_hours', 2)));
     }
 }

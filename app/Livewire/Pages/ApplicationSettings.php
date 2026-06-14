@@ -29,6 +29,8 @@ class ApplicationSettings extends Component
     public int $defaultServiceMinutes = 10;
     public bool $dailyQuotaEnabled = true;
     public int $dailyQuotaLimit = 200;
+    public bool $qrExpiryLimitEnabled = false;
+    public int $qrExpiryLimitHours = 2;
     public ?TemporaryUploadedFile $logoUpload = null;
     public ?TemporaryUploadedFile $faviconUpload = null;
 
@@ -59,6 +61,8 @@ class ApplicationSettings extends Component
             'defaultServiceMinutes' => ['required', 'integer', 'min:1', 'max:240'],
             'dailyQuotaEnabled' => ['boolean'],
             'dailyQuotaLimit' => [$this->dailyQuotaEnabled ? 'required' : 'nullable', 'integer', 'min:1', 'max:100000'],
+            'qrExpiryLimitEnabled' => ['boolean'],
+            'qrExpiryLimitHours' => [$this->qrExpiryLimitEnabled ? 'required' : 'nullable', 'integer', 'min:1', 'max:24'],
         ], [
             'primaryColor.regex' => 'Warna utama harus menggunakan format hex, contoh #1d4ed8.',
             'faviconUpload.mimes' => 'Favicon harus berupa file ico, png, jpg, jpeg, atau webp.',
@@ -75,6 +79,8 @@ class ApplicationSettings extends Component
             'defaultServiceMinutes' => 'Estimasi Awal Pelayanan',
             'dailyQuotaEnabled' => 'Quota Harian',
             'dailyQuotaLimit' => 'Total Quota Harian',
+            'qrExpiryLimitEnabled' => 'Batas QR dan Kode Manual',
+            'qrExpiryLimitHours' => 'Masa Berlaku QR',
         ]);
 
         if ($this->logoUpload) {
@@ -160,6 +166,22 @@ class ApplicationSettings extends Component
             'sort_order' => 3,
         ]);
 
+        AppSetting::putValue('queue.qr_expiry_limit_enabled', $validated['qrExpiryLimitEnabled'], [
+            'group' => 'queue',
+            'label' => 'Aktifkan Batas Durasi QR dan Kode Manual',
+            'type' => AppSetting::TYPE_BOOLEAN,
+            'is_public' => false,
+            'sort_order' => 4,
+        ]);
+
+        AppSetting::putValue('queue.qr_expiry_limit_hours', $validated['qrExpiryLimitHours'], [
+            'group' => 'queue',
+            'label' => 'Batas Durasi QR dan Kode Manual Dalam Jam',
+            'type' => AppSetting::TYPE_INTEGER,
+            'is_public' => false,
+            'sort_order' => 5,
+        ]);
+
         $this->syncCurrentSessionDailyQuotas(
             (bool) $validated['dailyQuotaEnabled'],
             (int) $validated['dailyQuotaLimit'],
@@ -182,6 +204,8 @@ class ApplicationSettings extends Component
         $this->defaultServiceMinutes = (int) AppSetting::getValue('queue.default_service_minutes', 10);
         $this->dailyQuotaEnabled = (bool) AppSetting::getValue('queue.daily_quota_enabled', true);
         $this->dailyQuotaLimit = max(1, (int) AppSetting::getValue('queue.daily_quota_limit', 200));
+        $this->qrExpiryLimitEnabled = (bool) AppSetting::getValue('queue.qr_expiry_limit_enabled', false);
+        $this->qrExpiryLimitHours = max(1, min(24, (int) AppSetting::getValue('queue.qr_expiry_limit_hours', 2)));
     }
 
     private function syncCurrentSessionDailyQuotas(bool $enabled, int $limit): void

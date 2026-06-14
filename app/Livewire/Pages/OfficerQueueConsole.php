@@ -596,16 +596,17 @@ class OfficerQueueConsole extends Component
             ->unique('applicant_id')
             ->keyBy('applicant_id');
 
+        $now = AppClock::now();
         $activeQrCode = QueueSessionQrCode::query()
             ->where('queue_session_id', $currentSession->id)
             ->where('is_active', true)
-            ->where(function (Builder $query) {
+            ->where(function (Builder $query) use ($now) {
                 $query->whereNull('starts_at')
-                    ->orWhere('starts_at', '<=', now());
+                    ->orWhere('starts_at', '<=', $now);
             })
-            ->where(function (Builder $query) {
+            ->where(function (Builder $query) use ($now) {
                 $query->whereNull('expires_at')
-                    ->orWhere('expires_at', '>=', now());
+                    ->orWhere('expires_at', '>=', $now);
             })
             ->whereNull('revoked_at')
             ->latest()

@@ -78,6 +78,8 @@ Permission pelanggan/penanya:
 
 Setiap item menu di master layout dicek dengan permission berkelompok seperti `admin.*`, `petugas.*`, dan `pelanggan.*`, sehingga menu dapat diatur per role tanpa mengubah view satu per satu.
 
+Semua field select di halaman aplikasi memakai autocomplete global dari master layout. Select asli tetap dipakai sebagai sumber data dan binding Livewire, sedangkan UI pencarian hanya menampilkan maksimal 5 opsi yang cocok agar daftar nama/opsi panjang tidak langsung terbuka penuh di HP.
+
 Seeder juga memberi permission kompatibilitas kepada role teknis lama jika role tersebut masih ada di database:
 
 - `applicant` mendapat permission setara `Pelanggan/Penanya`.
@@ -88,7 +90,22 @@ Ini menjaga akun yang dibuat sebelum penamaan role baku tetap bisa melihat menu 
 
 ## Seeder
 
-Seeder utama membuat:
+`DatabaseSeeder` hanya menjadi pengatur urutan dan memanggil seeder yang sudah dipisah berdasarkan jenis data:
+
+- `RolePermissionSeeder` untuk role, permission, dan mapping permission bawaan role.
+- `AppSettingSeeder` untuk setting aplikasi.
+- `DefaultUserSeeder` untuk akun super admin, petugas demo, pendaftar demo, dan profil applicant demo.
+- `QueueServiceSeeder` untuk master layanan.
+- `QueueServiceDependencySeeder` untuk prasyarat antar layanan.
+- `ServiceCounterSeeder` untuk loket layanan.
+- `ServiceDailyQuotaSeeder` untuk sesi hari berjalan, quota harian, dan alokasi target loket.
+
+Semua seeder memakai `SEED_SYNC_MODE`:
+
+- `add_only` hanya menambahkan data yang belum ada dan tidak menimpa perubahan operator.
+- `sync` mengembalikan data yang sama ke nilai default dari kode seeder.
+
+Seeder default membuat:
 
 - Super admin utama: `superadmin@asa-link.cloud`
 - Petugas demo: `petugas@example.test`
@@ -102,7 +119,7 @@ Seeder utama membuat:
 - Sesi antrian aktif untuk hari berjalan.
 - Kuota default 200 per layanan pada sesi hari berjalan.
 - Alokasi target loket otomatis berdasarkan kuota dan jumlah loket aktif.
-- Setting awal `app.name`, `app.logo`, `app.logo_enabled`, `app.favicon`, `app.primary_color`, `app.timezone`, `queue.default_service_minutes`, `queue.daily_quota_enabled`, dan `queue.daily_quota_limit`.
+- Setting awal `app.name`, `app.logo`, `app.logo_enabled`, `app.favicon`, `app.primary_color`, `app.timezone`, `queue.default_service_minutes`, `queue.daily_quota_enabled`, `queue.daily_quota_limit`, `queue.qr_expiry_limit_enabled`, dan `queue.qr_expiry_limit_hours`.
 
 Demo account memakai password default `password123`.
 
@@ -165,6 +182,8 @@ Pendaftar wajib berada di lokasi sebelum mengambil antrian. Pada dashboard penda
 
 Saat tombol ditekan, aplikasi membuka modal kamera untuk membaca QR aktif di lokasi layanan. Jika QR terbaca, aplikasi langsung memproses pengambilan antrian otomatis tanpa klik tombol. Jika kamera atau scan QR bermasalah, pendaftar dapat mengisi kode manual aktif yang ditampilkan/diberikan petugas. QR dan kode manual memiliki fungsi yang sama.
 
+Modal scan QR pada dashboard pendaftar dibuat adaptif untuk layar pendek: area kamera dapat mengecil/scroll sendiri, sedangkan panel kode manual berada di bagian bawah modal agar tetap mudah dijangkau pada resolusi kecil atau saat keyboard HP muncul.
+
 Konsol petugas menyediakan tombol `Download QR` saat QR/kode aktif tersedia. Tombol ini membuka halaman print A4 `/petugas/qr-ambil-antrian/print` tanpa header/nav aplikasi. Halaman tersebut menampilkan kode manual besar di bagian atas, QR SVG besar di tengah kertas, masa berlaku, link QR, dan tombol `Cetak / Simpan PDF`. QR print dibuat dari kode manual aktif sehingga tetap bisa dicetak ulang walaupun token QR mentah tidak disimpan di database. Tombol `Buat/Ganti QR & Kode` dilindungi permission `petugas.kelola_qr_antrian`, sehingga hanya Super Admin atau petugas yang diberi permission manual yang dapat membuat QR/kode baru.
 
 Semua tampilan waktu operasional memakai setting `app.timezone`, default `Asia/Jakarta`. Header dashboard authenticated menampilkan hari, tanggal, jam, menit, dan detik berjalan sesuai timezone tersebut.
@@ -175,7 +194,7 @@ Metode konfirmasi hadir:
 - Scan link QR aktif melalui route `/check-in/{token}` untuk konfirmasi hadir saja.
 - Konfirmasi manual oleh petugas melalui tombol `Konfirmasi Hadir` di konsol petugas.
 
-Petugas dapat membuat QR/kode baru dari konsol `/petugas`. Sistem menonaktifkan QR/kode lama pada sesi yang sama ketika QR baru dibuat. Token QR disimpan sebagai hash di database, sedangkan kode manual disimpan sebagai kode pendek aktif. Masa berlaku default QR/kode baru adalah 2 jam.
+Petugas dapat membuat QR/kode baru dari konsol `/petugas`. Sistem menonaktifkan QR/kode lama pada sesi yang sama ketika QR baru dibuat. Token QR disimpan sebagai hash di database, sedangkan kode manual disimpan sebagai kode pendek aktif. Masa berlaku QR/kode mengikuti setting `queue.qr_expiry_limit_enabled`: jika nonaktif, QR/kode berlaku sampai pukul 23.00 hari yang sama; jika aktif, QR/kode berlaku selama `queue.qr_expiry_limit_hours` jam dari waktu dibuat, tetapi tetap dipotong maksimal pukul 23.00 hari yang sama.
 
 Link QR dan kode manual yang baru dibuat ditampilkan di konsol agar bisa ditempelkan, ditampilkan di layar, atau dicetak untuk lokasi layanan.
 
@@ -222,6 +241,10 @@ Implementasi awal seeder mengatur Wawancara bergantung pada Verifikasi Berkas de
 
 Pada dashboard pendaftar, layanan yang belum memenuhi prasyarat menampilkan keterangan nama layanan yang wajib dipenuhi, misalnya `Layanan Wawancara baru bisa diambil setelah layanan Verifikasi Berkas selesai.`
 
+Urutan `Status Layanan` pada dashboard pendaftar diprioritaskan untuk layanan yang bisa langsung diambil antrian. Jika ada layanan yang terkunci oleh prasyarat, layanan prasyaratnya tetap ditampilkan lebih dulu agar alur layanan mudah dipahami, lalu layanan lanjutan muncul setelah syaratnya terpenuhi.
+
+Pendaftar hanya boleh memiliki satu antrian aktif lintas layanan pada satu sesi hari berjalan. Jika sedang menunggu, dipanggil, atau berlangsung pada satu layanan, tombol `Ambil Antrian` layanan lain dibuat nonaktif secara visual dan saat diklik menampilkan pesan layanan mana yang sedang diantri. Pendaftar dapat mencabut tiket yang masih berstatus `Antrian` melalui modal konfirmasi; tiket berubah menjadi `cancelled`, urutan hilang dari antrian aktif, dan jika mengambil ulang sistem memberi nomor paling akhir berdasarkan nomor terbesar layanan tersebut.
+
 Aturan ini tetap dinamis karena record dependensi dapat diubah di database tanpa mengubah kode.
 
 Semua pengecekan tiket baru melewati `App\Services\QueueRuntimeService`, yang menggabungkan validasi hadir, kuota layanan, prasyarat layanan, dan rekomendasi loket.
@@ -237,10 +260,14 @@ Tabel `app_settings` disiapkan untuk menyimpan setting aplikasi yang dapat berke
 - `app.primary_color` - Warna utama.
 - `app.timezone` - Zona waktu operasional untuk QR, dashboard, log, dan print.
 - `queue.default_service_minutes` - estimasi awal pelayanan per pendaftar.
+- `queue.daily_quota_enabled` - aktif/nonaktif quota harian layanan.
+- `queue.daily_quota_limit` - total quota harian default per layanan.
+- `queue.qr_expiry_limit_enabled` - aktif/nonaktif batas durasi QR dan kode manual dalam satuan jam.
+- `queue.qr_expiry_limit_hours` - jumlah jam masa berlaku QR/kode manual saat batas durasi aktif.
 
 Kolom `key`, `group`, `label`, `type`, `value`, `options`, `is_public`, dan `sort_order` memungkinkan penambahan variable setting baru tanpa membuat tabel baru.
 
-Halaman `/pengaturan-aplikasi` memungkinkan Super Admin mengubah setting utama aplikasi. Tampilan halaman dibuat sebagai form mobile, bukan tabel mentah, sehingga pengguna hanya melihat kontrol yang relevan seperti input teks untuk nama aplikasi, browse/upload file untuk logo dan favicon, thumbnail aktif dengan fallback, color picker untuk warna utama, pilihan zona waktu, input angka untuk estimasi, switch untuk aktif/nonaktif logo, serta switch quota harian yang menampilkan input total quota hanya saat aktif. Akses halaman dan menu drawer dilindungi permission `admin.pengaturan_aplikasi`.
+Halaman `/pengaturan-aplikasi` memungkinkan Super Admin mengubah setting utama aplikasi. Tampilan halaman dibuat sebagai form mobile, bukan tabel mentah, sehingga pengguna hanya melihat kontrol yang relevan seperti input teks untuk nama aplikasi, browse/upload file untuk logo dan favicon, thumbnail aktif dengan fallback, color picker untuk warna utama, pilihan zona waktu, input angka untuk estimasi, switch untuk aktif/nonaktif logo, switch quota harian yang menampilkan input total quota hanya saat aktif, serta switch batas durasi QR/kode yang menampilkan input jumlah jam hanya saat aktif. Akses halaman dan menu drawer dilindungi permission `admin.pengaturan_aplikasi`.
 
 Favicon browser menggunakan setting `app.favicon`. Jika kosong, layout memakai logo aktif sebagai fallback. Jika favicon/logo gagal dimuat, layout mengganti ikon tab ke SVG otomatis dari huruf awal nama aplikasi dan warna utama.
 
