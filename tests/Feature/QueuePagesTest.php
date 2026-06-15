@@ -7,6 +7,7 @@ use App\Models\AppSetting;
 use App\Models\CounterDailyAllocation;
 use App\Models\AttendanceCheckin;
 use App\Models\QueueServiceDependency;
+use App\Models\QueueSessionQrCode;
 use App\Models\QueueTicket;
 use App\Models\QueueService;
 use App\Models\QueueSession;
@@ -1255,6 +1256,62 @@ class QueuePagesTest extends TestCase
         }
     }
 
+    public function test_officer_dashboard_auto_regenerates_expired_queue_qr_when_enabled(): void
+    {
+        $this->seed();
+
+        $officer = User::where('email', 'superadmin@asa-link.cloud')->firstOrFail();
+
+        AppSetting::putValue('queue.qr_expiry_limit_enabled', true, [
+            'group' => 'queue',
+            'label' => 'Aktifkan Batas Durasi QR dan Kode Manual',
+            'type' => AppSetting::TYPE_BOOLEAN,
+            'is_public' => false,
+            'sort_order' => 4,
+        ]);
+
+        AppSetting::putValue('queue.qr_expiry_limit_hours', 1, [
+            'group' => 'queue',
+            'label' => 'Batas Durasi QR dan Kode Manual Dalam Jam',
+            'type' => AppSetting::TYPE_INTEGER,
+            'is_public' => false,
+            'sort_order' => 5,
+        ]);
+
+        AppSetting::putValue('queue.qr_auto_regenerate_enabled', true, [
+            'group' => 'queue',
+            'label' => 'QR dan Kode Manual Otomatis Berubah Saat Kedaluwarsa',
+            'type' => AppSetting::TYPE_BOOLEAN,
+            'is_public' => false,
+            'sort_order' => 6,
+        ]);
+
+        Carbon::setTestNow(Carbon::parse('2026-06-15 08:00:00', AppClock::timezone()));
+
+        try {
+            $oldQr = app(QueueRuntimeService::class)->createCheckInQr($officer);
+            $oldCode = $oldQr['manualCode'];
+
+            Carbon::setTestNow(Carbon::parse('2026-06-15 09:05:00', AppClock::timezone()));
+
+            $response = $this->actingAs($officer)->get('/petugas');
+            $newQrCode = QueueSessionQrCode::query()
+                ->where('is_active', true)
+                ->whereNull('revoked_at')
+                ->latest('id')
+                ->firstOrFail();
+
+            $response->assertOk();
+            $response->assertSee($newQrCode->manual_code);
+            $response->assertDontSee($oldCode);
+            $this->assertNotSame($oldQr['qrCode']->id, $newQrCode->id);
+            $this->assertTrue($newQrCode->expires_at->greaterThan(AppClock::now()));
+            $this->assertNotNull($oldQr['qrCode']->refresh()->revoked_at);
+        } finally {
+            Carbon::setTestNow();
+        }
+    }
+
     public function test_queue_qr_generation_requires_manual_officer_permission(): void
     {
         Permission::firstOrCreate(['name' => 'petugas.konsol_antrian']);
@@ -1367,6 +1424,7 @@ class QueuePagesTest extends TestCase
         $this->assertSame(200, AppSetting::getValue('queue.daily_quota_limit'));
         $this->assertFalse(AppSetting::getValue('queue.qr_expiry_limit_enabled'));
         $this->assertSame(2, AppSetting::getValue('queue.qr_expiry_limit_hours'));
+        $this->assertTrue(AppSetting::getValue('queue.qr_auto_regenerate_enabled'));
 
         $this->assertTrue(Role::findByName('Petugas')->hasPermissionTo('petugas.konsol_antrian'));
         $this->assertTrue(Role::findByName('Petugas')->hasPermissionTo('pengguna.profil'));
@@ -1928,6 +1986,7 @@ class QueuePagesTest extends TestCase
             ->set('dailyQuotaLimit', 150)
             ->set('qrExpiryLimitEnabled', true)
             ->set('qrExpiryLimitHours', 3)
+            ->set('qrAutoRegenerateEnabled', false)
             ->call('save')
             ->assertHasNoErrors();
 
@@ -1944,6 +2003,7 @@ class QueuePagesTest extends TestCase
         $this->assertSame(150, AppSetting::getValue('queue.daily_quota_limit'));
         $this->assertTrue(AppSetting::getValue('queue.qr_expiry_limit_enabled'));
         $this->assertSame(3, AppSetting::getValue('queue.qr_expiry_limit_hours'));
+        $this->assertFalse(AppSetting::getValue('queue.qr_auto_regenerate_enabled'));
 
         $this->assertDatabaseHas('service_daily_quotas', [
             'max_daily_quota' => 150,

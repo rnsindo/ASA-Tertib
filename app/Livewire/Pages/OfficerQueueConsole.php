@@ -5,7 +5,6 @@ namespace App\Livewire\Pages;
 use App\Models\Applicant;
 use App\Models\AttendanceCheckin;
 use App\Models\QueueService;
-use App\Models\QueueSessionQrCode;
 use App\Models\QueueTicket;
 use App\Models\ServiceCounter;
 use App\Services\QueueRuntimeService;
@@ -602,21 +601,7 @@ class OfficerQueueConsole extends Component
             ->unique('applicant_id')
             ->keyBy('applicant_id');
 
-        $now = AppClock::now();
-        $activeQrCode = QueueSessionQrCode::query()
-            ->where('queue_session_id', $currentSession->id)
-            ->where('is_active', true)
-            ->where(function (Builder $query) use ($now) {
-                $query->whereNull('starts_at')
-                    ->orWhere('starts_at', '<=', $now);
-            })
-            ->where(function (Builder $query) use ($now) {
-                $query->whereNull('expires_at')
-                    ->orWhere('expires_at', '>=', $now);
-            })
-            ->whereNull('revoked_at')
-            ->latest()
-            ->first();
+        $activeQrCode = $queueRuntime->activeCheckInQr(auth()->user());
 
         $selectedServiceQuota = null;
         $selectedCounterAllocation = null;

@@ -31,6 +31,7 @@ class ApplicationSettings extends Component
     public int $dailyQuotaLimit = 200;
     public bool $qrExpiryLimitEnabled = false;
     public int $qrExpiryLimitHours = 2;
+    public bool $qrAutoRegenerateEnabled = true;
     public ?TemporaryUploadedFile $logoUpload = null;
     public ?TemporaryUploadedFile $faviconUpload = null;
 
@@ -63,6 +64,7 @@ class ApplicationSettings extends Component
             'dailyQuotaLimit' => [$this->dailyQuotaEnabled ? 'required' : 'nullable', 'integer', 'min:1', 'max:100000'],
             'qrExpiryLimitEnabled' => ['boolean'],
             'qrExpiryLimitHours' => [$this->qrExpiryLimitEnabled ? 'required' : 'nullable', 'integer', 'min:1', 'max:24'],
+            'qrAutoRegenerateEnabled' => ['boolean'],
         ], [
             'primaryColor.regex' => 'Warna utama harus menggunakan format hex, contoh #1d4ed8.',
             'faviconUpload.mimes' => 'Favicon harus berupa file ico, png, jpg, jpeg, atau webp.',
@@ -81,6 +83,7 @@ class ApplicationSettings extends Component
             'dailyQuotaLimit' => 'Total Quota Harian',
             'qrExpiryLimitEnabled' => 'Batas QR dan Kode Manual',
             'qrExpiryLimitHours' => 'Masa Berlaku QR',
+            'qrAutoRegenerateEnabled' => 'QR dan Kode Otomatis Berubah',
         ]);
 
         if ($this->logoUpload) {
@@ -182,6 +185,14 @@ class ApplicationSettings extends Component
             'sort_order' => 5,
         ]);
 
+        AppSetting::putValue('queue.qr_auto_regenerate_enabled', $validated['qrAutoRegenerateEnabled'], [
+            'group' => 'queue',
+            'label' => 'QR dan Kode Manual Otomatis Berubah Saat Kedaluwarsa',
+            'type' => AppSetting::TYPE_BOOLEAN,
+            'is_public' => false,
+            'sort_order' => 6,
+        ]);
+
         $this->syncCurrentSessionDailyQuotas(
             (bool) $validated['dailyQuotaEnabled'],
             (int) $validated['dailyQuotaLimit'],
@@ -206,6 +217,7 @@ class ApplicationSettings extends Component
         $this->dailyQuotaLimit = max(1, (int) AppSetting::getValue('queue.daily_quota_limit', 200));
         $this->qrExpiryLimitEnabled = (bool) AppSetting::getValue('queue.qr_expiry_limit_enabled', false);
         $this->qrExpiryLimitHours = max(1, min(24, (int) AppSetting::getValue('queue.qr_expiry_limit_hours', 2)));
+        $this->qrAutoRegenerateEnabled = (bool) AppSetting::getValue('queue.qr_auto_regenerate_enabled', true);
     }
 
     private function syncCurrentSessionDailyQuotas(bool $enabled, int $limit): void

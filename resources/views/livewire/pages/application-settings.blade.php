@@ -363,6 +363,17 @@
                 <div class="muted" style="font-size: 12px;">Tetap tunduk batas maksimal harian pukul 23.00. Contoh: dibuat 22.30 dengan batas 2 jam, sistem hanya berlaku sampai 23.00.</div>
                 @error('qrExpiryLimitHours') <span class="error">{{ $message }}</span> @enderror
             </div>
+
+            <div class="settings-switch-row">
+                <div>
+                    <strong>QR & Kode Otomatis Berubah</strong>
+                    <span>Jika aktif, dashboard petugas akan membuat QR dan kode baru otomatis saat masa berlaku sebelumnya habis.</span>
+                </div>
+                <label class="switch" aria-label="QR dan Kode Otomatis Berubah">
+                    <input type="checkbox" wire:model="qrAutoRegenerateEnabled">
+                    <span class="switch-track"></span>
+                </label>
+            </div>
         @endif
     </section>
 

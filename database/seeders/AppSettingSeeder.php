@@ -119,6 +119,15 @@ class AppSettingSeeder extends Seeder
                 'is_public' => false,
                 'sort_order' => 5,
             ],
+            [
+                'key' => 'queue.qr_auto_regenerate_enabled',
+                'group' => 'queue',
+                'label' => 'QR dan Kode Manual Otomatis Berubah Saat Kedaluwarsa',
+                'type' => AppSetting::TYPE_BOOLEAN,
+                'value' => '1',
+                'is_public' => false,
+                'sort_order' => 6,
+            ],
         ];
     }
 }

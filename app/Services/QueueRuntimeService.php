@@ -81,6 +81,61 @@ class QueueRuntimeService
         });
     }
 
+    public function activeCheckInQr(?User $autoCreator = null): ?QueueSessionQrCode
+    {
+        $session = $this->currentSession();
+        $now = AppClock::now();
+        $activeQrCode = $this->activeCheckInQrQuery($session, $now)->first();
+
+        if ($activeQrCode) {
+            return $activeQrCode;
+        }
+
+        if (! $this->qrExpiryLimitEnabled() || ! $this->qrAutoRegenerateEnabled()) {
+            return null;
+        }
+
+        if ($now->greaterThan($now->copy()->setTime(23, 0, 0))) {
+            return null;
+        }
+
+        $expiredQrCode = QueueSessionQrCode::query()
+            ->where('queue_session_id', $session->id)
+            ->where('is_active', true)
+            ->whereNull('revoked_at')
+            ->whereNotNull('expires_at')
+            ->where('expires_at', '<', $now)
+            ->latest('expires_at')
+            ->latest('id')
+            ->first();
+
+        if (! $expiredQrCode) {
+            return null;
+        }
+
+        return $this->createCheckInQr(
+            $autoCreator,
+            label: 'QR Ambil Antrian Otomatis ' . AppClock::format($now, 'd/m/Y H:i'),
+        )['qrCode'];
+    }
+
+    private function activeCheckInQrQuery(QueueSession $session, Carbon $now)
+    {
+        return QueueSessionQrCode::query()
+            ->where('queue_session_id', $session->id)
+            ->where('is_active', true)
+            ->where(function ($query) use ($now) {
+                $query->whereNull('starts_at')
+                    ->orWhere('starts_at', '<=', $now);
+            })
+            ->where(function ($query) use ($now) {
+                $query->whereNull('expires_at')
+                    ->orWhere('expires_at', '>=', $now);
+            })
+            ->whereNull('revoked_at')
+            ->latest();
+    }
+
     private function resolveCheckInQrExpiresAt(?Carbon $expiresAt = null): Carbon
     {
         $now = AppClock::now();
@@ -625,5 +680,10 @@ class QueueRuntimeService
     private function qrExpiryLimitHours(): int
     {
         return max(1, min(24, (int) AppSetting::getValue('queue.qr_expiry_limit_hours', 2)));
+    }
+
+    private function qrAutoRegenerateEnabled(): bool
+    {
+        return (bool) AppSetting::getValue('queue.qr_auto_regenerate_enabled', true);
     }
 }
