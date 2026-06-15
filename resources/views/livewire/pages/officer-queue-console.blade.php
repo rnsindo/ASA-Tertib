@@ -620,6 +620,7 @@
                                 </div>
                                 <div class="ticket-title">
                                     <strong>{{ $ticket->applicant?->full_name ?: 'Pendaftar tidak ditemukan' }}</strong>
+                                    <span>{{ $ticket->applicant?->school_origin ?: 'Sekolah belum tersedia' }}</span>
                                     <span>{{ $ticket->applicant?->nisn ?: '-' }} - {{ $ticket->service?->name ?: '-' }}</span>
                                 </div>
                                 <span class="badge">{{ $ticket->counter?->code ?: '-' }}</span>
@@ -770,8 +771,20 @@
                 <p class="subtitle">Pendaftar yang hadir kembali dimasukkan ulang setelah dua antrian menunggu berikutnya pada loket yang sama.</p>
             </div>
 
+            <div class="quick-search-panel">
+                <div class="quick-search-head">
+                    <strong>Pencarian Tidak di Tempat</strong>
+                    <span>Menampilkan {{ $noShowTickets->count() }} dari {{ $noShowCount }} data</span>
+                </div>
+                <div class="field">
+                    <label for="noShowSearch">Cari Pendaftar Terlewat</label>
+                    <input id="noShowSearch" class="input" type="search" wire:model.live.debounce.250ms="noShowSearch" placeholder="Nama, NISN, sekolah, WhatsApp, kode tiket">
+                    @error('noShowSearch') <span class="error">{{ $message }}</span> @enderror
+                </div>
+            </div>
+
             @if($noShowTickets->isEmpty())
-                <div class="empty">Belum ada pendaftar yang terlewat pada loket ini.</div>
+                <div class="empty">{{ trim($noShowSearch) !== '' ? 'Tidak ada data tidak di tempat yang cocok dengan pencarian.' : 'Belum ada pendaftar yang terlewat pada loket ini.' }}</div>
             @else
                 <div class="no-show-list">
                     @foreach($noShowTickets as $ticket)

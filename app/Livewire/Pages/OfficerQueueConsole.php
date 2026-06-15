@@ -36,6 +36,7 @@ class OfficerQueueConsole extends Component
     public ?int $assigningApplicantId = null;
     public ?int $assigningServiceId = null;
     public string $search = '';
+    public string $noShowSearch = '';
     public int $visibleApplicantCount = self::APPLICANT_BATCH_SIZE;
     public string $notes = '';
     public ?string $generatedCheckInUrl = null;
@@ -78,6 +79,11 @@ class OfficerQueueConsole extends Component
     public function updatedSearch(): void
     {
         $this->visibleApplicantCount = self::APPLICANT_BATCH_SIZE;
+    }
+
+    public function updatedNoShowSearch(): void
+    {
+        $this->resetErrorBag('noShowSearch');
     }
 
     public function updatedTransferTargetCounterId(): void
@@ -681,11 +687,35 @@ class OfficerQueueConsole extends Component
             ];
         });
 
-        $noShowTickets = QueueTicket::query()
+        $noShowQuery = QueueTicket::query()
             ->with(['applicant.user', 'service', 'counter'])
             ->when($selectedCounter, fn (Builder $query) => $query->where('service_counter_id', $selectedCounter->id), fn (Builder $query) => $query->whereRaw('1 = 0'))
             ->whereDate('queue_date', today())
-            ->where('status', QueueTicket::STATUS_NO_SHOW)
+            ->where('status', QueueTicket::STATUS_NO_SHOW);
+
+        $noShowCount = (clone $noShowQuery)->count();
+        $noShowSearch = trim($this->noShowSearch);
+
+        if ($noShowSearch !== '') {
+            $term = '%' . $noShowSearch . '%';
+            $noShowQuery->where(function (Builder $query) use ($term): void {
+                $query->where('ticket_code', 'like', $term)
+                    ->orWhereHas('service', function (Builder $query) use ($term): void {
+                        $query->where('name', 'like', $term);
+                    })
+                    ->orWhereHas('applicant', function (Builder $query) use ($term): void {
+                        $query->where('full_name', 'like', $term)
+                            ->orWhere('nisn', 'like', $term)
+                            ->orWhere('school_origin', 'like', $term)
+                            ->orWhere('whatsapp', 'like', $term)
+                            ->orWhereHas('user', function (Builder $query) use ($term): void {
+                                $query->where('email', 'like', $term);
+                            });
+                    });
+            });
+        }
+
+        $noShowTickets = $noShowQuery
             ->orderByDesc('no_show_at')
             ->orderByDesc('id')
             ->get();
@@ -706,7 +736,7 @@ class OfficerQueueConsole extends Component
             'assignedCountersCount' => $counters->count(),
             'waitingCount' => $activeTickets->where('status', QueueTicket::STATUS_WAITING)->count(),
             'completedCount' => $completedCount,
-            'noShowCount' => $noShowTickets->count(),
+            'noShowCount' => $noShowCount,
             'applicants' => $applicants,
             'totalApplicants' => $totalApplicants,
             'hasMoreApplicants' => $applicants->count() < $totalApplicants,

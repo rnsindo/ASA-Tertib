@@ -1048,6 +1048,7 @@ class QueuePagesTest extends TestCase
 
         Livewire::actingAs($officer)
             ->test(OfficerQueueConsole::class)
+            ->assertSee('SMP Panggil')
             ->call('callTicket', $tickets[1]->id)
             ->assertHasErrors(['notes']);
 
@@ -1077,6 +1078,81 @@ class QueuePagesTest extends TestCase
             'service_counter_id' => $counterTwo->id,
             'status' => QueueTicket::STATUS_WAITING,
         ]);
+    }
+
+    public function test_officer_can_search_no_show_tickets_today(): void
+    {
+        Role::firstOrCreate(['name' => 'officer']);
+
+        $officer = User::factory()->create([
+            'email' => 'no-show-search-officer@example.test',
+            'password' => 'password123',
+        ]);
+        $officer->assignRole('officer');
+
+        $service = QueueService::create([
+            'name' => 'Layanan Tidak Hadir',
+            'slug' => 'layanan-tidak-hadir',
+            'code' => 'LTH',
+            'sort_order' => 1,
+            'is_active' => true,
+        ]);
+
+        $counter = ServiceCounter::create([
+            'queue_service_id' => $service->id,
+            'assigned_user_id' => $officer->id,
+            'name' => 'Loket Tidak Hadir',
+            'code' => 'LTH-1',
+            'sort_order' => 1,
+            'is_active' => true,
+        ]);
+
+        $session = app(QueueRuntimeService::class)->currentSession();
+
+        collect([
+            ['name' => 'Pendaftar Alpha Terlewat', 'school' => 'SMP Alpha', 'nisn' => '8833000001', 'code' => 'LTH-001'],
+            ['name' => 'Pendaftar Beta Terlewat', 'school' => 'SMP Beta', 'nisn' => '8833000002', 'code' => 'LTH-002'],
+        ])->each(function (array $item, int $index) use ($service, $counter, $session): void {
+            $user = User::factory()->create([
+                'email' => 'no-show-search-' . $index . '@example.test',
+                'password' => 'password123',
+            ]);
+
+            $applicant = Applicant::create([
+                'user_id' => $user->id,
+                'full_name' => $item['name'],
+                'school_origin' => $item['school'],
+                'nisn' => $item['nisn'],
+                'whatsapp' => '08883300000' . ($index + 1),
+                'status' => 'registered',
+            ]);
+
+            QueueTicket::create([
+                'applicant_id' => $applicant->id,
+                'queue_session_id' => $session->id,
+                'queue_service_id' => $service->id,
+                'service_counter_id' => $counter->id,
+                'queue_date' => $session->session_date,
+                'queue_number' => $index + 1,
+                'call_sequence' => ($index + 1) * 1000,
+                'ticket_code' => $item['code'],
+                'status' => QueueTicket::STATUS_NO_SHOW,
+                'assigned_at' => now()->subMinutes(20 - $index),
+                'called_at' => now()->subMinutes(10 - $index),
+                'no_show_at' => now()->subMinutes(5 - $index),
+                'no_show_count' => 1,
+            ]);
+        });
+
+        Livewire::actingAs($officer)
+            ->test(OfficerQueueConsole::class)
+            ->assertSee('Pencarian Tidak di Tempat')
+            ->assertSee('Pendaftar Alpha Terlewat')
+            ->assertSee('Pendaftar Beta Terlewat')
+            ->set('noShowSearch', 'SMP Alpha')
+            ->assertSee('Pendaftar Alpha Terlewat')
+            ->assertDontSee('Pendaftar Beta Terlewat')
+            ->assertSee('Menampilkan 1 dari 2 data');
     }
 
     public function test_officer_can_print_active_queue_qr_code(): void
@@ -2251,6 +2327,63 @@ class QueuePagesTest extends TestCase
             ->assertSee('Kode Manual')
             ->set('queue_code', $qr['manualCode'])
             ->call('claimSelectedService')
+            ->assertRedirect(route('dashboard'));
+
+        $this->assertDatabaseHas('attendance_checkins', [
+            'applicant_id' => $applicant->id,
+            'presence_method' => AttendanceCheckin::METHOD_QR,
+        ]);
+
+        $this->assertDatabaseHas('queue_tickets', [
+            'applicant_id' => $applicant->id,
+            'queue_service_id' => $service->id,
+            'service_counter_id' => $counter->id,
+            'status' => QueueTicket::STATUS_WAITING,
+        ]);
+    }
+
+    public function test_applicant_can_take_queue_from_scanned_qr_link_containing_manual_code(): void
+    {
+        Role::firstOrCreate(['name' => 'applicant']);
+
+        $user = User::factory()->create([
+            'email' => 'qr-link-applicant@example.test',
+            'password' => 'password123',
+        ]);
+        $user->assignRole('applicant');
+
+        $applicant = Applicant::create([
+            'user_id' => $user->id,
+            'full_name' => 'Pendaftar Link QR',
+            'school_origin' => 'SMP Link QR',
+            'nisn' => '1212121213',
+            'whatsapp' => '081212121213',
+            'status' => 'registered',
+        ]);
+
+        $service = QueueService::create([
+            'name' => 'Layanan Link QR',
+            'slug' => 'layanan-link-qr',
+            'code' => 'LLQ',
+            'sort_order' => 1,
+            'is_active' => true,
+        ]);
+
+        $counter = ServiceCounter::create([
+            'queue_service_id' => $service->id,
+            'name' => 'Loket Link QR',
+            'code' => 'LLQ-1',
+            'sort_order' => 1,
+            'is_active' => true,
+        ]);
+
+        $qr = app(QueueRuntimeService::class)->createCheckInQr();
+        $scannedUrl = route('queue.check-in', ['token' => $qr['manualCode']]);
+
+        Livewire::actingAs($user)
+            ->test(ApplicantDashboard::class)
+            ->call('openQueueScanner', $service->id)
+            ->call('claimScannedCredential', $scannedUrl)
             ->assertRedirect(route('dashboard'));
 
         $this->assertDatabaseHas('attendance_checkins', [

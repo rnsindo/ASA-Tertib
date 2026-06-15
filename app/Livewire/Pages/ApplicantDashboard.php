@@ -280,6 +280,13 @@ class ApplicantDashboard extends Component
         return $this->redirectRoute('dashboard');
     }
 
+    public function claimScannedCredential(string $credential)
+    {
+        $this->queue_code = trim($credential);
+
+        return $this->claimSelectedService();
+    }
+
     public function render()
     {
         $queueRuntime = app(QueueRuntimeService::class);

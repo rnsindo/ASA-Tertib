@@ -84,6 +84,7 @@
 - Menambahkan tanggal pada `Log Antrian` dashboard pendaftar sehingga setiap item menampilkan tanggal dan jam.
 - Membatasi tampilan `QR & Kode Ambil Antrian` pada dashboard petugas hanya untuk QR/kode yang masih aktif, serta membatasi masa berlaku default QR/kode maksimal sampai pukul 23.00 pada hari yang sama.
 - Menambahkan pengaturan batas durasi QR/kode manual pada `/pengaturan-aplikasi`: jika nonaktif QR/kode berlaku sampai 23.00, jika aktif operator dapat menentukan jumlah jam yang tetap tunduk batas harian 23.00.
+- Menambahkan nama sekolah pada kartu `Antrian Loket Ini` dashboard petugas dan menambahkan pencarian pada bagian `Tidak di Tempat Hari Ini`.
 - Memperjelas UX quota penuh pada dashboard pendaftar: registrasi tetap tersimpan, layanan penuh tetap tampil, tombol `Ambil Antrian` menampilkan pesan penuh dan tidak membuka scanner QR/kode.
 - Mengubah `Arahkan Pendaftar ke Loket` pada dashboard petugas: tombol `Masukkan` membuka modal pilih layanan, lalu sistem otomatis memilih loket buka dengan beban paling ringan.
 - Mengubah perhitungan target quota loket agar saat quota harian aktif, target per loket dihitung dari quota harian dibagi seluruh loket layanan, termasuk loket yang sedang tutup/nonaktif.

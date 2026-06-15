@@ -738,6 +738,27 @@
             let stream = null;
             let scanTimer = null;
 
+            function submitScannedCredential(value) {
+                const input = document.getElementById('queue_code');
+                const submit = document.getElementById('queueAutoScanSubmit');
+                const componentRoot = input?.closest('[wire\\:id]');
+                const componentId = componentRoot?.getAttribute('wire:id');
+
+                if (input) {
+                    input.value = value;
+                    input.dispatchEvent(new Event('input', { bubbles: true }));
+                }
+
+                if (componentId && window.Livewire?.find) {
+                    window.Livewire.find(componentId).call('claimScannedCredential', value);
+                    return;
+                }
+
+                if (submit) {
+                    setTimeout(() => submit.click(), 350);
+                }
+            }
+
             async function stopQueueScanner() {
                 if (scanTimer) {
                     clearInterval(scanTimer);
@@ -790,15 +811,11 @@
                             }
 
                             const value = codes[0].rawValue || '';
-                            const input = document.getElementById('queue_code');
-                            const submit = document.getElementById('queueAutoScanSubmit');
 
-                            if (input && submit && value) {
-                                input.value = value;
-                                input.dispatchEvent(new Event('input', { bubbles: true }));
+                            if (value) {
                                 status.textContent = 'QR terbaca. Memproses antrian otomatis...';
                                 await stopQueueScanner();
-                                setTimeout(() => submit.click(), 250);
+                                submitScannedCredential(value);
                             }
                         } catch (error) {
                             status.textContent = 'QR belum terbaca. Pastikan pencahayaan cukup atau gunakan kode manual.';

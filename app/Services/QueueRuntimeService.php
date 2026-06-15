@@ -516,13 +516,15 @@ class QueueRuntimeService
 
         $token = $this->extractToken($normalized);
         $manualCode = strtoupper($normalized);
+        $extractedManualCode = strtoupper($token);
 
         $qrCode = QueueSessionQrCode::query()
             ->with('session')
             ->where('is_active', true)
-            ->where(function ($query) use ($token, $manualCode) {
+            ->where(function ($query) use ($token, $manualCode, $extractedManualCode) {
                 $query->where('token_hash', $this->hashToken($token))
-                    ->orWhere('manual_code', $manualCode);
+                    ->orWhere('manual_code', $manualCode)
+                    ->orWhere('manual_code', $extractedManualCode);
             })
             ->first();
 
