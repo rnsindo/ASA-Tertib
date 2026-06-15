@@ -73,8 +73,8 @@ class ApplicantDashboard extends Component
         return match ($ticket->status) {
             QueueTicket::STATUS_IN_PROGRESS, QueueTicket::STATUS_CALLED => 'Sekarang',
             QueueTicket::STATUS_WAITING => $position
-                ? ($this->estimatedMinutesForTicket($ticket) * max(1, $position)) . 'm'
-                : $this->estimatedMinutesForTicket($ticket) . 'm',
+                ? ($this->estimatedMinutesForTicket($ticket) * max(1, $position)) . ' menit'
+                : $this->estimatedMinutesForTicket($ticket) . ' menit',
             QueueTicket::STATUS_NO_SHOW => 'Lapor',
             default => '-',
         };

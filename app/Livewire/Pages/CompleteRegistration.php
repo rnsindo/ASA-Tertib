@@ -34,7 +34,7 @@ class CompleteRegistration extends Component
             return;
         }
 
-        $this->name = $googleUser['name'] ?? '';
+        $this->name = '';
         $this->email = $googleUser['email'] ?? '';
     }
 
@@ -72,12 +72,17 @@ class CompleteRegistration extends Component
             return $this->redirectRoute('login');
         }
 
+        $validated['name'] = $this->normalizeUppercase($validated['name']);
+        $validated['school_origin'] = $this->normalizeUppercase($validated['school_origin']);
+        $validated['nisn'] = trim($validated['nisn']);
+        $validated['whatsapp'] = trim($validated['whatsapp']);
+
         $user = DB::transaction(function () use ($validated, $googleUser) {
             $user = User::create([
                 'name' => $validated['name'],
                 'email' => $validated['email'],
                 'google_id' => $googleUser['google_id'] ?? null,
-                'avatar_url' => $googleUser['avatar_url'] ?? null,
+                'avatar_url' => null,
                 'phone' => $validated['whatsapp'],
                 'password' => $validated['password'],
             ]);
@@ -122,5 +127,10 @@ class CompleteRegistration extends Component
     public function render()
     {
         return view('livewire.pages.complete-registration');
+    }
+
+    private function normalizeUppercase(string $value): string
+    {
+        return mb_strtoupper(trim(preg_replace('/\s+/', ' ', $value) ?? $value));
     }
 }

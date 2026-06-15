@@ -19,10 +19,25 @@
             padding: 16px;
             background: linear-gradient(135deg, var(--primary), #2f80ed);
             color: #fff;
+            display: grid;
+            gap: 10px;
+        }
+
+        .ticket-top-row {
             display: flex;
             justify-content: space-between;
-            gap: 12px;
-            align-items: flex-start;
+            gap: 10px;
+            align-items: center;
+            min-width: 0;
+        }
+
+        .ticket-title-label {
+            min-width: 0;
+            color: #dbeafe;
+            font-weight: 800;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
 
         .ticket-head span,
@@ -35,11 +50,13 @@
         }
 
         .ticket-number {
-            margin-top: 4px;
             font-size: 42px;
             line-height: .95;
             font-weight: 900;
-            word-break: break-word;
+            text-align: center;
+            white-space: nowrap;
+            word-break: normal;
+            overflow-wrap: normal;
         }
 
         .ticket-pill {
@@ -89,10 +106,11 @@
         }
 
         .ticket-service {
-            margin-top: 8px;
             color: #dbeafe;
             font-size: 13px;
             line-height: 1.4;
+            text-align: center;
+            overflow-wrap: anywhere;
         }
 
         .ticket-cut {
@@ -473,7 +491,7 @@
     @else
         @php
             $queueLabel = $activePosition ? str_pad((string) $activePosition, 2, '0', STR_PAD_LEFT) : ($activeTicket ? 'Aktif' : '-');
-            $counterLabel = $activeTicket?->counter?->code ?: ($activeTicket?->counter?->name ?: '-');
+            $counterLabel = $activeTicket?->counter?->name ?: ($activeTicket?->counter?->code ?: '-');
             $ticketCode = $activeTicket?->ticket_code ?: 'Belum Ada';
             $ticketStatus = match ($activeTicket?->status) {
                 \App\Models\QueueTicket::STATUS_WAITING => 'Menunggu',
@@ -495,12 +513,12 @@
 
         <article class="mobile-card ticket-card" aria-label="Status tiket antrian aktif">
             <div class="ticket-head">
-                <div>
-                    <span>Nomor Antrian</span>
-                    <div class="ticket-number">{{ $ticketCode }}</div>
-                    <div class="ticket-service">{{ $ticketService }}</div>
+                <div class="ticket-top-row">
+                    <span class="ticket-title-label">Nomor Antrian</span>
+                    <div class="ticket-pill {{ $ticketStatusClass }}">{{ $ticketStatus }}</div>
                 </div>
-                <div class="ticket-pill {{ $ticketStatusClass }}">{{ $ticketStatus }}</div>
+                <div class="ticket-number">{{ $ticketCode }}</div>
+                <div class="ticket-service">{{ $ticketService }}</div>
             </div>
             <div class="ticket-cut"></div>
             <div class="ticket-body">

@@ -18,6 +18,7 @@ class RolePermissionSeeder extends Seeder
         'admin.manajemen_user' => 'Admin - Manajemen User',
         'admin.reset_password_user' => 'Admin - Reset Password User',
         'admin.login_sebagai_user' => 'Admin - Login Sebagai User',
+        'pengguna.profil' => 'Pengguna - Profil Akun',
         'petugas.beranda' => 'Petugas - Beranda',
         'petugas.konsol_antrian' => 'Petugas - Konsol Antrian',
         'petugas.kelola_qr_antrian' => 'Petugas - Kelola QR Antrian',
@@ -30,11 +31,13 @@ class RolePermissionSeeder extends Seeder
     ];
 
     public const OFFICER_PERMISSIONS = [
+        'pengguna.profil',
         'petugas.beranda',
         'petugas.konsol_antrian',
     ];
 
     public const CUSTOMER_PERMISSIONS = [
+        'pengguna.profil',
         'pelanggan.beranda',
         'pelanggan.dashboard_antrian',
         'pelanggan.status_antrian',

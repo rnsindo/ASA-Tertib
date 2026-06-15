@@ -1,7 +1,7 @@
 <div class="panel stack" style="max-width: 760px; margin: 0 auto;">
     <div>
         <h1 class="title">Formulir Pendaftaran Lanjutan</h1>
-        <p class="subtitle">Nama dan email diambil dari Google. Jika nama akun Google tidak sesuai nama asli, ubah Nama Lengkap sebelum menyelesaikan pendaftaran.</p>
+        <p class="subtitle">Email diambil dari Google. Isi ulang Nama Lengkap sesuai identitas pendaftar sebelum menyelesaikan pendaftaran.</p>
     </div>
 
     <form class="stack" wire:submit="complete">

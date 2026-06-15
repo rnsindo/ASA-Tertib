@@ -13,6 +13,7 @@ use App\Models\QueueSession;
 use App\Models\ServiceCounter;
 use App\Models\ServiceDailyQuota;
 use App\Models\User;
+use App\Livewire\Pages\AccountProfile;
 use App\Livewire\Pages\ApplicantDashboard;
 use App\Livewire\Pages\ApplicationSettings;
 use App\Livewire\Pages\OfficerQueueConsole;
@@ -21,6 +22,7 @@ use App\Livewire\Pages\ServiceManagement;
 use App\Livewire\Pages\UserManagement;
 use App\Services\QueueRuntimeService;
 use App\Support\AppClock;
+use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Carbon;
@@ -137,10 +139,14 @@ class QueuePagesTest extends TestCase
             ->assertOk()
             ->assertSeeInOrder([
                 'Nomor Antrian',
-                'LSA-001',
                 'Tidak di Tempat',
+                'LSA-001',
+                'Layanan Status',
             ])
+            ->assertSee('ticket-top-row', false)
             ->assertSee('ticket-pill-missed', false)
+            ->assertSee('Loket Status')
+            ->assertDontSee('LSA-1')
             ->assertSee(AppClock::format($ticket->created_at, 'd/m/Y H:i'))
             ->assertSee('Nomor Anda sudah dipanggil tetapi tidak berada di tempat.');
     }
@@ -1333,6 +1339,7 @@ class QueuePagesTest extends TestCase
         $this->assertDatabaseHas('permissions', ['name' => 'admin.manajemen_user']);
         $this->assertDatabaseHas('permissions', ['name' => 'admin.reset_password_user']);
         $this->assertDatabaseHas('permissions', ['name' => 'admin.login_sebagai_user']);
+        $this->assertDatabaseHas('permissions', ['name' => 'pengguna.profil']);
         $this->assertDatabaseHas('permissions', ['name' => 'petugas.beranda']);
         $this->assertDatabaseHas('permissions', ['name' => 'petugas.konsol_antrian']);
         $this->assertDatabaseHas('permissions', ['name' => 'petugas.kelola_qr_antrian']);
@@ -1362,6 +1369,7 @@ class QueuePagesTest extends TestCase
         $this->assertSame(2, AppSetting::getValue('queue.qr_expiry_limit_hours'));
 
         $this->assertTrue(Role::findByName('Petugas')->hasPermissionTo('petugas.konsol_antrian'));
+        $this->assertTrue(Role::findByName('Petugas')->hasPermissionTo('pengguna.profil'));
         $this->assertFalse(Role::findByName('Petugas')->hasPermissionTo('petugas.kelola_qr_antrian'));
         $this->assertFalse(Role::findByName('Petugas')->hasPermissionTo('admin.pengaturan_aplikasi'));
         $this->assertFalse(Role::findByName('Petugas')->hasPermissionTo('admin.manajemen_layanan'));
@@ -1371,6 +1379,7 @@ class QueuePagesTest extends TestCase
         $this->assertFalse(Role::findByName('Pelanggan/Penanya')->hasPermissionTo('admin.manajemen_layanan'));
         $this->assertFalse(Role::findByName('Pelanggan/Penanya')->hasPermissionTo('admin.manajemen_user'));
         $this->assertTrue(Role::findByName('Pelanggan/Penanya')->hasPermissionTo('pelanggan.status_antrian'));
+        $this->assertTrue(Role::findByName('Pelanggan/Penanya')->hasPermissionTo('pengguna.profil'));
         $this->assertSame(10, AppSetting::getValue('queue.default_service_minutes'));
 
         AppSetting::putValue('queue.daily_quota_limit', 123, [
@@ -1389,6 +1398,7 @@ class QueuePagesTest extends TestCase
         $this->assertSame(200, AppSetting::getValue('queue.daily_quota_limit'));
         $this->assertTrue(Role::findByName('applicant')->hasPermissionTo('pelanggan.status_antrian'));
         $this->assertTrue(Role::findByName('applicant')->hasPermissionTo('pelanggan.dashboard_antrian'));
+        $this->assertTrue(Role::findByName('applicant')->hasPermissionTo('pengguna.profil'));
 
         $verification = QueueService::where('slug', 'verifikasi-berkas')->first();
         $interview = QueueService::where('slug', 'wawancara')->first();
@@ -1778,6 +1788,95 @@ class QueuePagesTest extends TestCase
         $this->assertNull(session('impersonator_id'));
     }
 
+    public function test_user_can_view_and_update_own_profile_except_email(): void
+    {
+        $this->seed(RolePermissionSeeder::class);
+
+        $user = User::factory()->create([
+            'name' => 'Nama Lama',
+            'email' => 'profil-pendaftar@example.test',
+            'phone' => '081111111111',
+        ]);
+        $user->assignRole('Pelanggan/Penanya');
+
+        $applicant = Applicant::create([
+            'user_id' => $user->id,
+            'full_name' => 'Nama Lama',
+            'school_origin' => 'SMP Lama',
+            'nisn' => '1234567890',
+            'whatsapp' => '081111111111',
+            'status' => 'registered',
+        ]);
+
+        $this->actingAs($user)
+            ->get('/profil')
+            ->assertOk()
+            ->assertSee('Profil Akun')
+            ->assertSee('Terkunci')
+            ->assertSee('Data Pendaftar');
+
+        Livewire::actingAs($user)
+            ->test(AccountProfile::class)
+            ->set('name', 'nama profil baru')
+            ->set('email', 'email-tidak-boleh-berubah@example.test')
+            ->set('phone', '')
+            ->set('schoolOrigin', 'smp profil baru')
+            ->set('nisn', '1234567891')
+            ->set('whatsapp', '082222222222')
+            ->call('save')
+            ->assertHasNoErrors()
+            ->assertSet('name', 'NAMA PROFIL BARU')
+            ->assertSet('schoolOrigin', 'SMP PROFIL BARU')
+            ->assertSet('email', 'profil-pendaftar@example.test');
+
+        $user->refresh();
+        $applicant->refresh();
+
+        $this->assertSame('NAMA PROFIL BARU', $user->name);
+        $this->assertSame('profil-pendaftar@example.test', $user->email);
+        $this->assertSame('082222222222', $user->phone);
+        $this->assertSame('NAMA PROFIL BARU', $applicant->full_name);
+        $this->assertSame('SMP PROFIL BARU', $applicant->school_origin);
+        $this->assertSame('1234567891', $applicant->nisn);
+        $this->assertSame('082222222222', $applicant->whatsapp);
+    }
+
+    public function test_officer_can_update_basic_profile_without_applicant_fields(): void
+    {
+        $this->seed(RolePermissionSeeder::class);
+
+        $officer = User::factory()->create([
+            'name' => 'Petugas Profil',
+            'email' => 'petugas-profil@example.test',
+            'phone' => null,
+        ]);
+        $officer->assignRole('Petugas');
+
+        $this->actingAs($officer)
+            ->get('/profil')
+            ->assertOk()
+            ->assertSee('Profil Akun')
+            ->assertSee('Akun ini belum memiliki data pendaftar')
+            ->assertDontSee('Data Pendaftar');
+
+        Livewire::actingAs($officer)
+            ->test(AccountProfile::class)
+            ->set('name', 'petugas loket profil')
+            ->set('phone', '083333333333')
+            ->set('email', 'petugas-baru@example.test')
+            ->call('save')
+            ->assertHasNoErrors()
+            ->assertSet('name', 'PETUGAS LOKET PROFIL')
+            ->assertSet('email', 'petugas-profil@example.test');
+
+        $officer->refresh();
+
+        $this->assertSame('PETUGAS LOKET PROFIL', $officer->name);
+        $this->assertSame('petugas-profil@example.test', $officer->email);
+        $this->assertSame('083333333333', $officer->phone);
+        $this->assertNull($officer->applicant);
+    }
+
     public function test_super_admin_can_update_application_settings(): void
     {
         $this->seed();
@@ -1900,7 +1999,7 @@ class QueuePagesTest extends TestCase
         $response = $this->actingAs($user)->get('/dashboard');
 
         $response->assertOk();
-        $response->assertSee('<strong>20m</strong>', false);
+        $response->assertSee('<strong>20 menit</strong>', false);
 
         $completedUserOne = User::factory()->create(['email' => 'estimate-done-one@example.test']);
         $completedApplicantOne = Applicant::create([
@@ -1953,8 +2052,8 @@ class QueuePagesTest extends TestCase
         $response = $this->actingAs($user)->get('/dashboard');
 
         $response->assertOk();
-        $response->assertSee('<strong>10m</strong>', false);
-        $response->assertDontSee('<strong>20m</strong>', false);
+        $response->assertSee('<strong>10 menit</strong>', false);
+        $response->assertDontSee('<strong>20 menit</strong>', false);
     }
 
     public function test_complete_registration_name_is_editable_and_validation_is_indonesian(): void
@@ -1972,6 +2071,8 @@ class QueuePagesTest extends TestCase
 
         $response->assertOk();
         $response->assertSee('<title>Formulir Pendaftaran Lanjutan - ASA-Tertib</title>', false);
+        $response->assertSee('Email diambil dari Google.');
+        $response->assertDontSee('Nama Google');
         $response->assertSee('class="app-shell is-guest"', false);
         $response->assertDontSee('class="app-header"', false);
         $response->assertDontSee('class="bottom-nav"', false);
@@ -1980,6 +2081,8 @@ class QueuePagesTest extends TestCase
         $response->assertDontSee('id="name" class="input" type="text" wire:model="name" readonly', false);
 
         Livewire::test(CompleteRegistration::class)
+            ->assertSet('name', '')
+            ->assertSet('email', 'google-registration@example.test')
             ->set('name', '')
             ->set('email', 'google-registration@example.test')
             ->call('complete')
@@ -1999,6 +2102,7 @@ class QueuePagesTest extends TestCase
         ]);
 
         Livewire::test(CompleteRegistration::class)
+            ->assertSet('name', '')
             ->set('name', 'Pendaftar Intended')
             ->set('email', 'google-intended@example.test')
             ->set('school_origin', 'SMP Intended')
@@ -2014,6 +2118,13 @@ class QueuePagesTest extends TestCase
         $this->assertAuthenticatedAs($user);
         $this->assertTrue($user->hasRole('Pelanggan/Penanya'));
         $this->assertTrue($user->can('pelanggan.dashboard_antrian'));
+        $this->assertSame('PENDAFTAR INTENDED', $user->name);
+        $this->assertNull($user->avatar_url);
+        $this->assertDatabaseHas('applicants', [
+            'user_id' => $user->id,
+            'full_name' => 'PENDAFTAR INTENDED',
+            'school_origin' => 'SMP INTENDED',
+        ]);
         $this->assertNull(session('url.intended'));
     }
 

@@ -34,6 +34,7 @@ Route::middleware(['auth', 'account.active'])->group(function () {
     Route::livewire('/dashboard', 'pages.applicant-dashboard')->name('dashboard');
     Route::livewire('/petugas', 'pages.officer-queue-console')->name('officer.console');
     Route::livewire('/petugas/loket-lain', 'pages.officer-other-counters')->name('officer.other-counters');
+    Route::livewire('/profil', 'pages.account-profile')->name('profile.account');
     Route::livewire('/pengaturan-aplikasi', 'pages.application-settings')->name('settings.application');
     Route::livewire('/manajemen-user', 'pages.user-management')->name('users.management');
     Route::livewire('/manajemen-layanan', 'pages.service-management')->name('services.management');

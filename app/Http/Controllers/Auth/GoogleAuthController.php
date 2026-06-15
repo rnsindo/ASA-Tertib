@@ -65,7 +65,6 @@ class GoogleAuthController extends Controller
 
             $user->forceFill([
                 'google_id' => $user->google_id ?: $googleUser->getId(),
-                'avatar_url' => $googleUser->getAvatar(),
             ])->save();
 
             Auth::login($user, true);
@@ -78,9 +77,9 @@ class GoogleAuthController extends Controller
         session([
             'google_registration' => [
                 'google_id' => $googleUser->getId(),
-                'name' => $googleUser->getName() ?: $googleUser->getNickname(),
+                'name' => '',
                 'email' => $googleUser->getEmail(),
-                'avatar_url' => $googleUser->getAvatar(),
+                'avatar_url' => null,
             ],
         ]);
 

@@ -132,6 +132,108 @@ class ExampleTest extends TestCase
         $this->assertGuest();
     }
 
+    public function test_new_google_registration_ignores_google_name_and_avatar(): void
+    {
+        Socialite::shouldReceive('driver')
+            ->with('google')
+            ->once()
+            ->andReturn(new class {
+                public function user(): object
+                {
+                    return new class {
+                        public function getId(): string
+                        {
+                            return 'google-new-id';
+                        }
+
+                        public function getEmail(): string
+                        {
+                            return 'new-google@example.test';
+                        }
+
+                        public function getAvatar(): string
+                        {
+                            return 'https://example.test/avatar.png';
+                        }
+
+                        public function getName(): string
+                        {
+                            return 'Nama Dari Google';
+                        }
+
+                        public function getNickname(): ?string
+                        {
+                            return 'Nickname Google';
+                        }
+                    };
+                }
+            });
+
+        $this->get('/auth/google/callback')
+            ->assertRedirect(route('register.complete'));
+
+        $this->assertSame([
+            'google_id' => 'google-new-id',
+            'name' => '',
+            'email' => 'new-google@example.test',
+            'avatar_url' => null,
+        ], session('google_registration'));
+    }
+
+    public function test_existing_google_login_does_not_replace_avatar_from_google(): void
+    {
+        $user = User::factory()->create([
+            'email' => 'existing-google@example.test',
+            'password' => 'password123',
+            'google_id' => null,
+            'avatar_url' => null,
+        ]);
+
+        Socialite::shouldReceive('driver')
+            ->with('google')
+            ->once()
+            ->andReturn(new class {
+                public function user(): object
+                {
+                    return new class {
+                        public function getId(): string
+                        {
+                            return 'google-existing-id';
+                        }
+
+                        public function getEmail(): string
+                        {
+                            return 'existing-google@example.test';
+                        }
+
+                        public function getAvatar(): string
+                        {
+                            return 'https://example.test/avatar.png';
+                        }
+
+                        public function getName(): string
+                        {
+                            return 'Nama Google Existing';
+                        }
+
+                        public function getNickname(): ?string
+                        {
+                            return null;
+                        }
+                    };
+                }
+            });
+
+        $this->get('/auth/google/callback')
+            ->assertRedirect(route('dashboard'));
+
+        $user->refresh();
+
+        $this->assertSame('google-existing-id', $user->google_id);
+        $this->assertNull($user->avatar_url);
+        $this->assertAuthenticatedAs($user);
+    }
+
     public function test_authenticated_google_invalid_state_returns_to_dashboard(): void
     {
         $user = User::factory()->create([

@@ -773,6 +773,9 @@
         $canCustomerScanQr = ($currentUser?->can('pelanggan.scan_qr') ?? false) || $hasCustomerRole;
         $canCustomerHistory = ($currentUser?->can('pelanggan.riwayat') ?? false) || $hasCustomerRole;
         $canCustomerProfile = ($currentUser?->can('pelanggan.profil') ?? false) || $hasCustomerRole;
+        $canAccountProfile = ($currentUser?->can('pengguna.profil') ?? false)
+            || $canCustomerProfile
+            || $hasOfficerRole;
         $showOfficerBottomNav = $canOfficerConsole || $canServiceManagement || $canUserManagement;
         $canHome = $canCustomerHome || $canOfficerHome;
         $homeUrl = $isAuthenticated
@@ -864,7 +867,7 @@
                             User
                         </a>
                     @else
-                        <a class="nav-item" href="{{ route('officer.console') }}">
+                        <a class="nav-item {{ request()->routeIs('profile.account') ? 'active' : '' }}" href="{{ route('profile.account') }}">
                             <span class="nav-icon"><svg viewBox="0 0 24 24"><path d="M12 15.5A3.5 3.5 0 1 0 12 8a3.5 3.5 0 0 0 0 7.5Z"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06A1.65 1.65 0 0 0 15 19.4a1.65 1.65 0 0 0-1 .6 1.65 1.65 0 0 0-.33 1.82V22a2 2 0 1 1-4 0v-.18A1.65 1.65 0 0 0 8.6 20a1.65 1.65 0 0 0-1.82-.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-.6-1 1.65 1.65 0 0 0-1.82-.33H2a2 2 0 1 1 0-4h.18A1.65 1.65 0 0 0 4 8.6a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 8.6 4a1.65 1.65 0 0 0 1-.6A1.65 1.65 0 0 0 9.82 2H10a2 2 0 1 1 4 0v.18A1.65 1.65 0 0 0 15 4.6a1.65 1.65 0 0 0 1.82.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9c.23.36.36.77.6 1h.18a2 2 0 1 1 0 4H20a1.65 1.65 0 0 0-.6 1Z"/></svg></span>
                             Profil
                         </a>
@@ -895,7 +898,7 @@
                         </a>
                     @endif
                     @if($canCustomerProfile)
-                        <a class="nav-item" href="#">
+                        <a class="nav-item {{ request()->routeIs('profile.account') ? 'active' : '' }}" href="{{ route('profile.account') }}">
                             <span class="nav-icon"><svg viewBox="0 0 24 24"><path d="M18 20a6 6 0 0 0-12 0"/><path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z"/></svg></span>
                             Profil
                         </a>
@@ -944,6 +947,12 @@
                 </div>
 
                 <nav class="drawer-menu" aria-label="Menu drawer">
+                    @if($canAccountProfile)
+                        <a class="drawer-item {{ request()->routeIs('profile.account') ? 'active' : '' }}" href="{{ route('profile.account') }}">
+                            <span class="drawer-icon"><svg viewBox="0 0 24 24"><path d="M18 20a6 6 0 0 0-12 0"/><path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z"/></svg></span>
+                            <span>Profil Akun</span>
+                        </a>
+                    @endif
                     @if($canOfficerConsole)
                         <a class="drawer-item {{ request()->routeIs('officer.console') ? 'active' : '' }}" href="{{ route('officer.console') }}">
                             <span class="drawer-icon"><svg viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13"/><path d="M3 6h.01M3 12h.01M3 18h.01"/></svg></span>

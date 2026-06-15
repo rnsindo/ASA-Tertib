@@ -85,6 +85,11 @@
 - Membatasi tampilan `QR & Kode Ambil Antrian` pada dashboard petugas hanya untuk QR/kode yang masih aktif, serta membatasi masa berlaku default QR/kode maksimal sampai pukul 23.00 pada hari yang sama.
 - Menambahkan pengaturan batas durasi QR/kode manual pada `/pengaturan-aplikasi`: jika nonaktif QR/kode berlaku sampai 23.00, jika aktif operator dapat menentukan jumlah jam yang tetap tunduk batas harian 23.00.
 - Menambahkan nama sekolah pada kartu `Antrian Loket Ini` dashboard petugas dan menambahkan pencarian pada bagian `Tidak di Tempat Hari Ini`.
+- Mengubah registrasi lanjutan Google agar nama dan avatar dari Google tidak dipakai; pendaftar wajib mengetik nama sendiri, serta nama pendaftar dan nama sekolah disimpan uppercase.
+- Menambahkan halaman `/profil` untuk semua akun login agar pengguna bisa melihat dan memperbarui biodata sendiri tanpa mengubah email; akun pendaftar menyinkronkan nama ke data pendaftar, menyimpan nama/sekolah uppercase, dan menu dilindungi permission `pengguna.profil`.
+- Mengubah kartu tiket aktif pada dashboard pendaftar agar bagian `Loket` menampilkan nama loket, bukan kode loket.
+- Mengubah satuan `Estimasi` dashboard pendaftar dari `m` menjadi `menit` agar jelas bahwa nilai adalah durasi menit, bukan meter.
+- Merapikan kartu `Nomor Antrian` dashboard pendaftar agar label dan status selalu berdampingan, kode antrian berada pada baris tengah sendiri, dan nama layanan tampil di bawah kode.
 - Memperjelas UX quota penuh pada dashboard pendaftar: registrasi tetap tersimpan, layanan penuh tetap tampil, tombol `Ambil Antrian` menampilkan pesan penuh dan tidak membuka scanner QR/kode.
 - Mengubah `Arahkan Pendaftar ke Loket` pada dashboard petugas: tombol `Masukkan` membuka modal pilih layanan, lalu sistem otomatis memilih loket buka dengan beban paling ringan.
 - Mengubah perhitungan target quota loket agar saat quota harian aktif, target per loket dihitung dari quota harian dibagi seluruh loket layanan, termasuk loket yang sedang tutup/nonaktif.
