@@ -90,6 +90,8 @@
 - Mengubah kartu tiket aktif pada dashboard pendaftar agar bagian `Loket` menampilkan nama loket, bukan kode loket.
 - Mengubah satuan `Estimasi` dashboard pendaftar dari `m` menjadi `menit` agar jelas bahwa nilai adalah durasi menit, bukan meter.
 - Merapikan kartu `Nomor Antrian` dashboard pendaftar agar label dan status selalu berdampingan, kode antrian berada pada baris tengah sendiri, dan nama layanan tampil di bawah kode.
+- Menambahkan field `Urutan Tampil Pendaftar` pada popup edit layanan agar admin dapat mengatur `sort_order` default layanan di dashboard pendaftar.
+- Menambahkan drag reorder pada daftar layanan di `/manajemen-layanan` agar admin bisa menggeser card layanan untuk menyimpan urutan tampil pendaftar tanpa membuka popup edit.
 - Memperjelas UX quota penuh pada dashboard pendaftar: registrasi tetap tersimpan, layanan penuh tetap tampil, tombol `Ambil Antrian` menampilkan pesan penuh dan tidak membuka scanner QR/kode.
 - Mengubah `Arahkan Pendaftar ke Loket` pada dashboard petugas: tombol `Masukkan` membuka modal pilih layanan, lalu sistem otomatis memilih loket buka dengan beban paling ringan.
 - Mengubah perhitungan target quota loket agar saat quota harian aktif, target per loket dihitung dari quota harian dibagi seluruh loket layanan, termasuk loket yang sedang tutup/nonaktif.

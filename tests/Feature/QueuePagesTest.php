@@ -1489,6 +1489,8 @@ class QueuePagesTest extends TestCase
         $response->assertSee('Manajemen Layanan');
         $response->assertSee('Tambah Layanan');
         $response->assertSee('Verifikasi Berkas');
+        $response->assertSee('data-service-sort-list', false);
+        $response->assertSee('data-service-drag-handle', false);
 
         Livewire::actingAs($superAdmin)
             ->test(ServiceManagement::class)
@@ -1556,6 +1558,30 @@ class QueuePagesTest extends TestCase
             'code' => 'TA2',
         ]);
 
+        $draggedOrder = QueueService::query()
+            ->orderBy('sort_order')
+            ->orderBy('id')
+            ->pluck('id')
+            ->reverse()
+            ->values()
+            ->all();
+
+        Livewire::actingAs($superAdmin)
+            ->test(ServiceManagement::class)
+            ->call('reorderServices', $draggedOrder)
+            ->assertHasNoErrors();
+
+        $this->assertSame(
+            $draggedOrder,
+            QueueService::query()
+                ->orderBy('sort_order')
+                ->orderBy('id')
+                ->pluck('id')
+                ->values()
+                ->all()
+        );
+
+        $service->refresh();
         $verification = QueueService::where('slug', 'verifikasi-berkas')->firstOrFail();
 
         Livewire::actingAs($superAdmin)
@@ -1563,9 +1589,11 @@ class QueuePagesTest extends TestCase
             ->call('openEditServiceModal', $service->id)
             ->assertSet('editingServiceId', $service->id)
             ->assertSet('editingServiceCode', 'TA')
+            ->assertSet('serviceSortOrder', (string) $service->sort_order)
             ->assertSet('serviceRequiresPrevious', false)
             ->set('serviceName', 'Tes Administrasi Revisi')
             ->set('serviceDescription', 'Deskripsi sudah direvisi')
+            ->set('serviceSortOrder', 1)
             ->set('serviceIsActive', false)
             ->set('serviceRequiresPrevious', true)
             ->set('requiredServiceId', (string) $verification->id)
@@ -1580,6 +1608,7 @@ class QueuePagesTest extends TestCase
         $this->assertSame('Tes Administrasi Revisi', $service->name);
         $this->assertSame('TA', $service->code);
         $this->assertSame('Deskripsi sudah direvisi', $service->description);
+        $this->assertSame(1, $service->sort_order);
         $this->assertFalse($service->is_active);
         $this->assertDatabaseHas('queue_service_dependencies', [
             'queue_service_id' => $service->id,

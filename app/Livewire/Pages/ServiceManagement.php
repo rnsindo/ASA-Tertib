@@ -23,6 +23,7 @@ class ServiceManagement extends Component
 {
     public string $serviceName = '';
     public string $serviceDescription = '';
+    public string $serviceSortOrder = '0';
     public bool $serviceIsActive = true;
     public bool $serviceRequiresPrevious = false;
     public string $requiredServiceId = '';
@@ -62,7 +63,7 @@ class ServiceManagement extends Component
                     'slug' => $this->uniqueServiceSlug($validated['serviceName']),
                     'code' => $this->uniqueServiceCode($validated['serviceName']),
                     'description' => trim((string) $validated['serviceDescription']) ?: null,
-                    'sort_order' => ((int) QueueService::query()->max('sort_order')) + 1,
+                    'sort_order' => (int) $validated['serviceSortOrder'],
                     'is_active' => (bool) $validated['serviceIsActive'],
                 ]);
 
@@ -112,6 +113,7 @@ class ServiceManagement extends Component
                 $service->forceFill([
                     'name' => trim($validated['serviceName']),
                     'description' => trim((string) $validated['serviceDescription']) ?: null,
+                    'sort_order' => (int) $validated['serviceSortOrder'],
                     'is_active' => (bool) $validated['serviceIsActive'],
                 ])->save();
 
@@ -131,6 +133,7 @@ class ServiceManagement extends Component
     {
         $this->authorizeServiceManagement();
         $this->resetServiceForm();
+        $this->serviceSortOrder = (string) $this->nextServiceSortOrder();
         $this->isServiceModalOpen = true;
     }
 
@@ -146,12 +149,13 @@ class ServiceManagement extends Component
         $this->editingServiceCode = $service->code;
         $this->serviceName = $service->name;
         $this->serviceDescription = (string) $service->description;
+        $this->serviceSortOrder = (string) $service->sort_order;
         $this->serviceIsActive = (bool) $service->is_active;
         $this->serviceRequiresPrevious = (bool) $dependency;
         $this->requiredServiceId = $dependency ? (string) $dependency->required_queue_service_id : '';
         $this->requiredStatusMode = $dependency?->required_status_mode ?: QueueServiceDependency::MODE_COMPLETED;
         $this->isServiceModalOpen = true;
-        $this->resetErrorBag(['serviceName', 'serviceDescription', 'requiredServiceId', 'requiredStatusMode']);
+        $this->resetErrorBag(['serviceName', 'serviceDescription', 'serviceSortOrder', 'requiredServiceId', 'requiredStatusMode']);
     }
 
     public function closeServiceModal(): void
@@ -299,6 +303,40 @@ class ServiceManagement extends Component
         $this->notify('success', 'Status loket berhasil diperbarui.');
     }
 
+    public function reorderServices(array $orderedServiceIds): void
+    {
+        $this->authorizeServiceManagement();
+
+        $orderedIds = collect($orderedServiceIds)
+            ->map(fn ($id): int => (int) $id)
+            ->filter(fn (int $id): bool => $id > 0)
+            ->unique()
+            ->values();
+
+        $existingIds = QueueService::query()
+            ->whereIn('id', $orderedIds)
+            ->pluck('id')
+            ->map(fn (int $id): int => $id)
+            ->values();
+
+        if ($orderedIds->count() === 0 || $orderedIds->count() !== $existingIds->count()) {
+            $this->notify('error', 'Urutan layanan gagal disimpan. Alasan: data layanan tidak valid.');
+
+            return;
+        }
+
+        DB::transaction(function () use ($orderedIds): void {
+            $orderedIds->each(function (int $serviceId, int $index): void {
+                QueueService::query()
+                    ->whereKey($serviceId)
+                    ->update(['sort_order' => $index + 1]);
+            });
+        });
+
+        $this->selectedServiceId = null;
+        $this->notify('success', 'Urutan tampil layanan berhasil disimpan.');
+    }
+
     public function render()
     {
         $services = QueueService::query()
@@ -343,13 +381,14 @@ class ServiceManagement extends Component
     {
         $this->serviceName = '';
         $this->serviceDescription = '';
+        $this->serviceSortOrder = '0';
         $this->serviceIsActive = true;
         $this->serviceRequiresPrevious = false;
         $this->requiredServiceId = '';
         $this->requiredStatusMode = QueueServiceDependency::MODE_COMPLETED;
         $this->editingServiceId = null;
         $this->editingServiceCode = '';
-        $this->resetErrorBag(['serviceName', 'serviceDescription', 'requiredServiceId', 'requiredStatusMode']);
+        $this->resetErrorBag(['serviceName', 'serviceDescription', 'serviceSortOrder', 'requiredServiceId', 'requiredStatusMode']);
     }
 
     private function resetCounterForm(): void
@@ -451,6 +490,7 @@ class ServiceManagement extends Component
         $validated = $this->validate([
             'serviceName' => ['required', 'string', 'max:120'],
             'serviceDescription' => ['nullable', 'string', 'max:500'],
+            'serviceSortOrder' => ['required', 'integer', 'min:0', 'max:65535'],
             'serviceIsActive' => ['boolean'],
             'serviceRequiresPrevious' => ['boolean'],
             'requiredServiceId' => $requiredServiceRules,
@@ -461,6 +501,7 @@ class ServiceManagement extends Component
         ], [
             'serviceName' => 'nama layanan',
             'serviceDescription' => 'deskripsi layanan',
+            'serviceSortOrder' => 'urutan tampil pendaftar',
             'serviceRequiresPrevious' => 'syarat layanan sebelumnya',
             'requiredServiceId' => 'layanan prasyarat',
             'requiredStatusMode' => 'status prasyarat',
@@ -487,6 +528,11 @@ class ServiceManagement extends Component
         }
 
         return $validated;
+    }
+
+    private function nextServiceSortOrder(): int
+    {
+        return ((int) QueueService::query()->max('sort_order')) + 1;
     }
 
     private function saveServiceDependency(QueueService $service, array $validated): void

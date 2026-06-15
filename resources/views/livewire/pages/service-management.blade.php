@@ -3,9 +3,13 @@
         .service-management-page { gap: 14px; }
 
         .service-form,
-        .service-card,
         .counter-modal-card,
         .counter-form {
+            display: grid;
+            gap: 12px;
+        }
+
+        .service-list {
             display: grid;
             gap: 12px;
         }
@@ -28,6 +32,8 @@
         }
 
         .service-card {
+            display: grid;
+            gap: 12px;
             text-align: left;
             width: 100%;
             border: 1px solid var(--line);
@@ -36,14 +42,52 @@
             padding: 14px;
             box-shadow: 0 10px 28px rgba(15, 61, 122, .08);
             color: var(--ink);
-            cursor: pointer;
+        }
+
+        .service-card.is-dragging {
+            opacity: .72;
+            border-color: var(--primary);
+            box-shadow: 0 18px 42px rgba(15, 61, 122, .2);
+        }
+
+        .service-card.is-drop-target {
+            outline: 2px dashed #60a5fa;
+            outline-offset: 3px;
         }
 
         .service-card-head {
             display: grid;
-            grid-template-columns: 44px 1fr auto;
+            grid-template-columns: 40px 44px 1fr auto;
             gap: 10px;
             align-items: center;
+        }
+
+        .service-drag-handle {
+            width: 40px;
+            height: 40px;
+            display: grid;
+            place-items: center;
+            border: 1px solid #bfdbfe;
+            border-radius: 8px;
+            background: #f8fbff;
+            color: var(--primary-deep);
+            cursor: grab;
+            touch-action: none;
+        }
+
+        .service-drag-handle:active {
+            cursor: grabbing;
+        }
+
+        .service-drag-handle svg,
+        .service-open-button svg {
+            width: 18px;
+            height: 18px;
+            fill: none;
+            stroke: currentColor;
+            stroke-width: 2;
+            stroke-linecap: round;
+            stroke-linejoin: round;
         }
 
         .service-icon {
@@ -101,6 +145,26 @@
             margin-top: 4px;
             color: var(--primary-deep);
             font-size: 18px;
+        }
+
+        .service-card-actions {
+            display: grid;
+            grid-template-columns: 1fr;
+        }
+
+        .service-open-button {
+            min-height: 40px;
+            border: 1px solid #bfdbfe;
+            border-radius: 8px;
+            background: #f8fbff;
+            color: var(--primary-deep);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            font: inherit;
+            font-weight: 800;
+            cursor: pointer;
         }
 
         .switch-line {
@@ -322,6 +386,15 @@
             .counter-item .icon-only {
                 grid-column: 2;
             }
+
+            .service-card-head {
+                grid-template-columns: 40px 44px 1fr;
+            }
+
+            .service-badges {
+                grid-column: 1 / -1;
+                justify-content: flex-start;
+            }
         }
     </style>
 
@@ -339,21 +412,24 @@
         </button>
     </section>
 
-    <div class="stack">
+    <div class="service-list" data-service-sort-list wire:ignore.self>
         @forelse($services as $service)
             @php
                 $activeDependency = $service->dependencies->first(
                     fn ($dependency) => is_null($dependency->queue_session_id) && $dependency->is_active
                 );
             @endphp
-            <button class="service-card" type="button" wire:click="openCounters({{ $service->id }})" wire:key="service-{{ $service->id }}">
+            <article class="service-card" data-service-id="{{ $service->id }}" wire:key="service-{{ $service->id }}">
                 <div class="service-card-head">
+                    <button class="service-drag-handle" type="button" aria-label="Geser urutan {{ $service->name }}" data-service-drag-handle>
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5h.01M15 5h.01M9 12h.01M15 12h.01M9 19h.01M15 19h.01"/></svg>
+                    </button>
                     <span class="service-icon">
                         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16"/><path d="M4 12h16"/><path d="M4 17h10"/></svg>
                     </span>
                     <span class="service-title">
                         <strong>{{ $service->name }}</strong>
-                        <span>{{ $service->code }}{{ $service->description ? ' - ' . $service->description : '' }}</span>
+                        <span>Urutan {{ $service->sort_order }} - {{ $service->code }}{{ $service->description ? ' - ' . $service->description : '' }}</span>
                     </span>
                     <span class="service-badges">
                         <span class="badge">{{ $service->is_active ? 'Aktif' : 'Nonaktif' }}</span>
@@ -377,7 +453,13 @@
                         <strong>{{ $service->tickets_count }}</strong>
                     </span>
                 </div>
-            </button>
+                <div class="service-card-actions">
+                    <button class="service-open-button" type="button" wire:click="openCounters({{ $service->id }})">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg>
+                        Detail Layanan & Loket
+                    </button>
+                </div>
+            </article>
         @empty
             <div class="empty">Belum ada layanan. Gunakan tombol Tambah Layanan untuk membuat layanan pertama.</div>
         @endforelse
@@ -414,6 +496,13 @@
                             <label for="serviceCodeLocked">Kode Layanan</label>
                             <input id="serviceCodeLocked" class="input" type="text" value="{{ $editingServiceCode }}" readonly>
                             <span class="muted" style="font-size: 12px;">Kode dikunci karena dipakai pada nomor tiket dan riwayat antrian.</span>
+                        </div>
+
+                        <div class="field">
+                            <label for="serviceSortOrder">Urutan Tampil Pendaftar</label>
+                            <input id="serviceSortOrder" class="input" type="number" min="0" max="65535" wire:model="serviceSortOrder" inputmode="numeric" placeholder="Contoh: 1">
+                            <span class="muted" style="font-size: 12px;">Nilai kecil tampil lebih awal saat pendaftar belum memiliki nomor antrian.</span>
+                            @error('serviceSortOrder') <span class="error">{{ $message }}</span> @enderror
                         </div>
                     @endif
 
@@ -641,6 +730,128 @@
     @endif
 
     <script>
+        (() => {
+            if (window.__asaServiceSortInitialized) {
+                return;
+            }
+
+            window.__asaServiceSortInitialized = true;
+
+            const initializeServiceSort = () => {
+                document.querySelectorAll('[data-service-sort-list]').forEach((list) => {
+                    if (list.dataset.sortReady === '1') {
+                        return;
+                    }
+
+                    list.dataset.sortReady = '1';
+                    let draggedItem = null;
+                    let activePointerId = null;
+                    let startY = 0;
+                    let hasMoved = false;
+
+                    const orderedIds = () => Array.from(list.querySelectorAll('[data-service-id]'))
+                        .map((item) => Number.parseInt(item.dataset.serviceId || '0', 10))
+                        .filter((id) => Number.isFinite(id) && id > 0);
+
+                    const clearDropTargets = () => {
+                        list.querySelectorAll('.is-drop-target').forEach((item) => item.classList.remove('is-drop-target'));
+                    };
+
+                    const commitOrder = () => {
+                        const componentRoot = list.closest('[wire\\:id]');
+                        const componentId = componentRoot?.getAttribute('wire:id');
+                        const ids = orderedIds();
+
+                        if (componentId && ids.length && window.Livewire?.find) {
+                            window.Livewire.find(componentId).call('reorderServices', ids);
+                        }
+                    };
+
+                    const itemAfterPointer = (clientY) => {
+                        const items = Array.from(list.querySelectorAll('[data-service-id]:not(.is-dragging)'));
+
+                        return items.reduce((closest, item) => {
+                            const box = item.getBoundingClientRect();
+                            const offset = clientY - box.top - (box.height / 2);
+
+                            if (offset < 0 && offset > closest.offset) {
+                                return { offset, item };
+                            }
+
+                            return closest;
+                        }, { offset: Number.NEGATIVE_INFINITY, item: null }).item;
+                    };
+
+                    list.addEventListener('pointerdown', (event) => {
+                        const handle = event.target.closest('[data-service-drag-handle]');
+
+                        if (! handle || ! list.contains(handle)) {
+                            return;
+                        }
+
+                        draggedItem = handle.closest('[data-service-id]');
+                        activePointerId = event.pointerId;
+                        startY = event.clientY;
+                        hasMoved = false;
+
+                        handle.setPointerCapture(event.pointerId);
+                        draggedItem?.classList.add('is-dragging');
+                    });
+
+                    list.addEventListener('pointermove', (event) => {
+                        if (! draggedItem || event.pointerId !== activePointerId) {
+                            return;
+                        }
+
+                        event.preventDefault();
+
+                        if (Math.abs(event.clientY - startY) > 4) {
+                            hasMoved = true;
+                        }
+
+                        const afterItem = itemAfterPointer(event.clientY);
+                        clearDropTargets();
+
+                        if (afterItem) {
+                            afterItem.classList.add('is-drop-target');
+                            list.insertBefore(draggedItem, afterItem);
+                        } else {
+                            list.appendChild(draggedItem);
+                        }
+                    }, { passive: false });
+
+                    const finishDrag = (event) => {
+                        if (! draggedItem || event.pointerId !== activePointerId) {
+                            return;
+                        }
+
+                        draggedItem.classList.remove('is-dragging');
+                        clearDropTargets();
+
+                        if (hasMoved) {
+                            commitOrder();
+                        }
+
+                        draggedItem = null;
+                        activePointerId = null;
+                        hasMoved = false;
+                    };
+
+                    list.addEventListener('pointerup', finishDrag);
+                    list.addEventListener('pointercancel', finishDrag);
+                });
+            };
+
+            document.addEventListener('DOMContentLoaded', initializeServiceSort);
+            document.addEventListener('livewire:navigated', initializeServiceSort);
+
+            if (window.Livewire?.hook) {
+                window.Livewire.hook('morph.updated', initializeServiceSort);
+            }
+
+            window.setTimeout(initializeServiceSort, 0);
+        })();
+
         document.addEventListener('livewire:init', () => {
             Livewire.on('service-notify', (payload) => {
                 const event = Array.isArray(payload) ? payload[0] : payload;
