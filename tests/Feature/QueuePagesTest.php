@@ -1087,6 +1087,80 @@ class QueuePagesTest extends TestCase
         ]);
     }
 
+    public function test_officer_can_call_and_start_random_waiting_ticket_when_service_allows_random_order(): void
+    {
+        Role::firstOrCreate(['name' => 'officer']);
+
+        $officer = User::factory()->create([
+            'email' => 'random-call-officer@example.test',
+            'password' => 'password123',
+        ]);
+        $officer->assignRole('officer');
+
+        $service = QueueService::create([
+            'name' => 'Layanan Panggil Acak',
+            'slug' => 'layanan-panggil-acak',
+            'code' => 'LPA',
+            'sort_order' => 1,
+            'enforce_call_order' => false,
+            'is_active' => true,
+        ]);
+
+        $counter = ServiceCounter::create([
+            'queue_service_id' => $service->id,
+            'assigned_user_id' => $officer->id,
+            'name' => 'Loket Panggil Acak',
+            'code' => 'LPA-1',
+            'sort_order' => 1,
+            'is_active' => true,
+        ]);
+
+        $session = app(QueueRuntimeService::class)->currentSession();
+
+        $tickets = collect(range(1, 3))->map(function (int $number) use ($service, $counter, $session): QueueTicket {
+            $user = User::factory()->create([
+                'email' => "random-call-applicant-{$number}@example.test",
+                'password' => 'password123',
+            ]);
+
+            $applicant = Applicant::create([
+                'user_id' => $user->id,
+                'full_name' => "Pendaftar Acak {$number}",
+                'school_origin' => 'SMP Acak',
+                'nisn' => '881100000' . $number,
+                'whatsapp' => '08881100000' . $number,
+                'status' => 'registered',
+            ]);
+
+            return QueueTicket::create([
+                'applicant_id' => $applicant->id,
+                'queue_session_id' => $session->id,
+                'queue_service_id' => $service->id,
+                'service_counter_id' => $counter->id,
+                'queue_date' => $session->session_date,
+                'queue_number' => $number,
+                'call_sequence' => $number * 1000,
+                'ticket_code' => 'LPA-' . str_pad((string) $number, 3, '0', STR_PAD_LEFT),
+                'status' => QueueTicket::STATUS_WAITING,
+                'assigned_at' => now()->addMinutes($number),
+            ]);
+        })->values();
+
+        Livewire::actingAs($officer)
+            ->test(OfficerQueueConsole::class)
+            ->call('callTicket', $tickets[1]->id)
+            ->assertHasNoErrors();
+
+        $this->assertSame(QueueTicket::STATUS_CALLED, $tickets[1]->refresh()->status);
+
+        Livewire::actingAs($officer)
+            ->test(OfficerQueueConsole::class)
+            ->call('startTicket', $tickets[2]->id)
+            ->assertHasNoErrors();
+
+        $this->assertSame(QueueTicket::STATUS_IN_PROGRESS, $tickets[2]->refresh()->status);
+    }
+
     public function test_officer_can_search_no_show_tickets_today(): void
     {
         Role::firstOrCreate(['name' => 'officer']);
@@ -1491,6 +1565,7 @@ class QueuePagesTest extends TestCase
         $this->seed();
         $this->assertSame('Verifikasi Berkas', QueueService::where('slug', 'verifikasi-berkas')->value('name'));
         $this->assertSame('Loket Verifikasi 1', ServiceCounter::where('code', 'VB-1')->value('name'));
+        $this->assertTrue((bool) QueueService::where('slug', 'verifikasi-berkas')->value('enforce_call_order'));
 
         $response = $this->actingAs($superAdmin)->get('/petugas');
 
@@ -1648,10 +1723,12 @@ class QueuePagesTest extends TestCase
             ->assertSet('editingServiceId', $service->id)
             ->assertSet('editingServiceCode', 'TA')
             ->assertSet('serviceSortOrder', (string) $service->sort_order)
+            ->assertSet('serviceEnforceCallOrder', true)
             ->assertSet('serviceRequiresPrevious', false)
             ->set('serviceName', 'Tes Administrasi Revisi')
             ->set('serviceDescription', 'Deskripsi sudah direvisi')
             ->set('serviceSortOrder', 1)
+            ->set('serviceEnforceCallOrder', false)
             ->set('serviceIsActive', false)
             ->set('serviceRequiresPrevious', true)
             ->set('requiredServiceId', (string) $verification->id)
@@ -1667,6 +1744,7 @@ class QueuePagesTest extends TestCase
         $this->assertSame('TA', $service->code);
         $this->assertSame('Deskripsi sudah direvisi', $service->description);
         $this->assertSame(1, $service->sort_order);
+        $this->assertFalse($service->enforce_call_order);
         $this->assertFalse($service->is_active);
         $this->assertDatabaseHas('queue_service_dependencies', [
             'queue_service_id' => $service->id,
@@ -1988,6 +2066,7 @@ class QueuePagesTest extends TestCase
             ->set('qrExpiryLimitHours', 3)
             ->set('qrAutoRegenerateEnabled', false)
             ->call('save')
+            ->assertDispatched('settings-notify', type: 'success', message: 'Pengaturan aplikasi berhasil disimpan.')
             ->assertHasNoErrors();
 
         $this->assertSame('ASA-Tertib Test', AppSetting::getValue('app.name'));
@@ -2008,6 +2087,18 @@ class QueuePagesTest extends TestCase
         $this->assertDatabaseHas('service_daily_quotas', [
             'max_daily_quota' => 150,
         ]);
+
+        Livewire::actingAs($superAdmin)
+            ->test(ApplicationSettings::class)
+            ->set('primaryColor', 'biru')
+            ->call('save')
+            ->assertHasErrors(['primaryColor'])
+            ->assertDispatched('settings-notify', function (string $event, array $params): bool {
+                return $event === 'settings-notify'
+                    && ($params['type'] ?? null) === 'error'
+                    && str_contains($params['message'] ?? '', 'Pengaturan gagal disimpan. Alasan:')
+                    && str_contains($params['message'] ?? '', 'format hex');
+            });
     }
 
     public function test_applicant_dashboard_estimate_uses_default_then_average_completed_service_time(): void

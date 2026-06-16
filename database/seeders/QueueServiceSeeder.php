@@ -19,6 +19,7 @@ class QueueServiceSeeder extends Seeder
                 'code' => 'VB',
                 'description' => 'Pemeriksaan kelengkapan berkas pendaftaran.',
                 'sort_order' => 1,
+                'enforce_call_order' => true,
                 'is_active' => true,
             ],
             [
@@ -27,6 +28,7 @@ class QueueServiceSeeder extends Seeder
                 'code' => 'WW',
                 'description' => 'Sesi wawancara calon siswa.',
                 'sort_order' => 2,
+                'enforce_call_order' => true,
                 'is_active' => true,
             ],
         ])->each(function (array $service): void {

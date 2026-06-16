@@ -24,6 +24,7 @@ class ServiceManagement extends Component
     public string $serviceName = '';
     public string $serviceDescription = '';
     public string $serviceSortOrder = '0';
+    public bool $serviceEnforceCallOrder = true;
     public bool $serviceIsActive = true;
     public bool $serviceRequiresPrevious = false;
     public string $requiredServiceId = '';
@@ -64,6 +65,7 @@ class ServiceManagement extends Component
                     'code' => $this->uniqueServiceCode($validated['serviceName']),
                     'description' => trim((string) $validated['serviceDescription']) ?: null,
                     'sort_order' => (int) $validated['serviceSortOrder'],
+                    'enforce_call_order' => (bool) $validated['serviceEnforceCallOrder'],
                     'is_active' => (bool) $validated['serviceIsActive'],
                 ]);
 
@@ -114,6 +116,7 @@ class ServiceManagement extends Component
                     'name' => trim($validated['serviceName']),
                     'description' => trim((string) $validated['serviceDescription']) ?: null,
                     'sort_order' => (int) $validated['serviceSortOrder'],
+                    'enforce_call_order' => (bool) $validated['serviceEnforceCallOrder'],
                     'is_active' => (bool) $validated['serviceIsActive'],
                 ])->save();
 
@@ -150,6 +153,7 @@ class ServiceManagement extends Component
         $this->serviceName = $service->name;
         $this->serviceDescription = (string) $service->description;
         $this->serviceSortOrder = (string) $service->sort_order;
+        $this->serviceEnforceCallOrder = (bool) $service->enforce_call_order;
         $this->serviceIsActive = (bool) $service->is_active;
         $this->serviceRequiresPrevious = (bool) $dependency;
         $this->requiredServiceId = $dependency ? (string) $dependency->required_queue_service_id : '';
@@ -382,6 +386,7 @@ class ServiceManagement extends Component
         $this->serviceName = '';
         $this->serviceDescription = '';
         $this->serviceSortOrder = '0';
+        $this->serviceEnforceCallOrder = true;
         $this->serviceIsActive = true;
         $this->serviceRequiresPrevious = false;
         $this->requiredServiceId = '';
@@ -491,6 +496,7 @@ class ServiceManagement extends Component
             'serviceName' => ['required', 'string', 'max:120'],
             'serviceDescription' => ['nullable', 'string', 'max:500'],
             'serviceSortOrder' => ['required', 'integer', 'min:0', 'max:65535'],
+            'serviceEnforceCallOrder' => ['boolean'],
             'serviceIsActive' => ['boolean'],
             'serviceRequiresPrevious' => ['boolean'],
             'requiredServiceId' => $requiredServiceRules,
@@ -502,6 +508,7 @@ class ServiceManagement extends Component
             'serviceName' => 'nama layanan',
             'serviceDescription' => 'deskripsi layanan',
             'serviceSortOrder' => 'urutan tampil pendaftar',
+            'serviceEnforceCallOrder' => 'wajib panggil berurutan',
             'serviceRequiresPrevious' => 'syarat layanan sebelumnya',
             'requiredServiceId' => 'layanan prasyarat',
             'requiredStatusMode' => 'status prasyarat',

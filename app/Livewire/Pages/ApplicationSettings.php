@@ -8,6 +8,7 @@ use App\Models\ServiceDailyQuota;
 use App\Services\QueueRuntimeService;
 use App\Support\AppClock;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
 use Livewire\Component;
@@ -50,7 +51,140 @@ class ApplicationSettings extends Component
 
     public function save(): void
     {
-        $validated = $this->validate([
+        try {
+            $validated = $this->validatedSettingsPayload();
+
+            if ($this->logoUpload) {
+                $path = $this->logoUpload->store('logos', 'public');
+                $validated['appLogo'] = 'storage/' . $path;
+            }
+
+            if ($this->faviconUpload) {
+                $path = $this->faviconUpload->store('favicons', 'public');
+                $validated['appFavicon'] = 'storage/' . $path;
+            }
+
+            AppSetting::putValue('app.name', $validated['appName'], [
+                'group' => 'identity',
+                'label' => 'Nama Aplikasi',
+                'type' => AppSetting::TYPE_STRING,
+                'is_public' => true,
+                'sort_order' => 1,
+            ]);
+
+            AppSetting::putValue('app.logo', $validated['appLogo'], [
+                'group' => 'identity',
+                'label' => 'Logo Aplikasi',
+                'type' => AppSetting::TYPE_IMAGE,
+                'is_public' => true,
+                'sort_order' => 2,
+            ]);
+
+            AppSetting::putValue('app.logo_enabled', $validated['appLogoEnabled'], [
+                'group' => 'identity',
+                'label' => 'Tampilkan Logo',
+                'type' => AppSetting::TYPE_BOOLEAN,
+                'is_public' => true,
+                'sort_order' => 3,
+            ]);
+
+            AppSetting::putValue('app.favicon', $validated['appFavicon'], [
+                'group' => 'identity',
+                'label' => 'Favicon Browser',
+                'type' => AppSetting::TYPE_IMAGE,
+                'is_public' => true,
+                'sort_order' => 4,
+            ]);
+
+            AppSetting::putValue('app.primary_color', $validated['primaryColor'], [
+                'group' => 'theme',
+                'label' => 'Warna Utama',
+                'type' => AppSetting::TYPE_STRING,
+                'is_public' => true,
+                'sort_order' => 1,
+            ]);
+
+            AppSetting::putValue('app.timezone', $validated['appTimezone'], [
+                'group' => 'system',
+                'label' => 'Zona Waktu Aplikasi',
+                'type' => AppSetting::TYPE_STRING,
+                'is_public' => false,
+                'sort_order' => 1,
+            ]);
+            AppClock::applyConfiguredTimezone();
+
+            AppSetting::putValue('queue.default_service_minutes', $validated['defaultServiceMinutes'], [
+                'group' => 'queue',
+                'label' => 'Estimasi Awal Pelayanan Per Pendaftar',
+                'type' => AppSetting::TYPE_INTEGER,
+                'is_public' => false,
+                'sort_order' => 1,
+            ]);
+
+            AppSetting::putValue('queue.daily_quota_enabled', $validated['dailyQuotaEnabled'], [
+                'group' => 'queue',
+                'label' => 'Aktifkan Quota Harian',
+                'type' => AppSetting::TYPE_BOOLEAN,
+                'is_public' => false,
+                'sort_order' => 2,
+            ]);
+
+            AppSetting::putValue('queue.daily_quota_limit', $validated['dailyQuotaLimit'], [
+                'group' => 'queue',
+                'label' => 'Total Quota Harian',
+                'type' => AppSetting::TYPE_INTEGER,
+                'is_public' => false,
+                'sort_order' => 3,
+            ]);
+
+            AppSetting::putValue('queue.qr_expiry_limit_enabled', $validated['qrExpiryLimitEnabled'], [
+                'group' => 'queue',
+                'label' => 'Aktifkan Batas Durasi QR dan Kode Manual',
+                'type' => AppSetting::TYPE_BOOLEAN,
+                'is_public' => false,
+                'sort_order' => 4,
+            ]);
+
+            AppSetting::putValue('queue.qr_expiry_limit_hours', $validated['qrExpiryLimitHours'], [
+                'group' => 'queue',
+                'label' => 'Batas Durasi QR dan Kode Manual Dalam Jam',
+                'type' => AppSetting::TYPE_INTEGER,
+                'is_public' => false,
+                'sort_order' => 5,
+            ]);
+
+            AppSetting::putValue('queue.qr_auto_regenerate_enabled', $validated['qrAutoRegenerateEnabled'], [
+                'group' => 'queue',
+                'label' => 'QR dan Kode Manual Otomatis Berubah Saat Kedaluwarsa',
+                'type' => AppSetting::TYPE_BOOLEAN,
+                'is_public' => false,
+                'sort_order' => 6,
+            ]);
+
+            $this->syncCurrentSessionDailyQuotas(
+                (bool) $validated['dailyQuotaEnabled'],
+                (int) $validated['dailyQuotaLimit'],
+            );
+
+            session()->flash('status', 'Pengaturan aplikasi berhasil disimpan.');
+            $this->notify('success', 'Pengaturan aplikasi berhasil disimpan.');
+            $this->logoUpload = null;
+            $this->faviconUpload = null;
+            $this->loadForm();
+        } catch (ValidationException $exception) {
+            $message = collect($exception->validator->errors()->all())->first()
+                ?: 'data pengaturan tidak valid.';
+            $this->notify('error', 'Pengaturan gagal disimpan. Alasan: ' . $message);
+
+            throw $exception;
+        } catch (\Throwable $exception) {
+            $this->notify('error', 'Pengaturan gagal disimpan. Alasan: ' . $exception->getMessage());
+        }
+    }
+
+    private function validatedSettingsPayload(): array
+    {
+        return $this->validate([
             'appName' => ['required', 'string', 'max:120'],
             'appLogo' => ['nullable', 'string', 'max:255'],
             'appFavicon' => ['nullable', 'string', 'max:255'],
@@ -85,123 +219,6 @@ class ApplicationSettings extends Component
             'qrExpiryLimitHours' => 'Masa Berlaku QR',
             'qrAutoRegenerateEnabled' => 'QR dan Kode Otomatis Berubah',
         ]);
-
-        if ($this->logoUpload) {
-            $path = $this->logoUpload->store('logos', 'public');
-            $validated['appLogo'] = 'storage/' . $path;
-        }
-
-        if ($this->faviconUpload) {
-            $path = $this->faviconUpload->store('favicons', 'public');
-            $validated['appFavicon'] = 'storage/' . $path;
-        }
-
-        AppSetting::putValue('app.name', $validated['appName'], [
-            'group' => 'identity',
-            'label' => 'Nama Aplikasi',
-            'type' => AppSetting::TYPE_STRING,
-            'is_public' => true,
-            'sort_order' => 1,
-        ]);
-
-        AppSetting::putValue('app.logo', $validated['appLogo'], [
-            'group' => 'identity',
-            'label' => 'Logo Aplikasi',
-            'type' => AppSetting::TYPE_IMAGE,
-            'is_public' => true,
-            'sort_order' => 2,
-        ]);
-
-        AppSetting::putValue('app.logo_enabled', $validated['appLogoEnabled'], [
-            'group' => 'identity',
-            'label' => 'Tampilkan Logo',
-            'type' => AppSetting::TYPE_BOOLEAN,
-            'is_public' => true,
-            'sort_order' => 3,
-        ]);
-
-        AppSetting::putValue('app.favicon', $validated['appFavicon'], [
-            'group' => 'identity',
-            'label' => 'Favicon Browser',
-            'type' => AppSetting::TYPE_IMAGE,
-            'is_public' => true,
-            'sort_order' => 4,
-        ]);
-
-        AppSetting::putValue('app.primary_color', $validated['primaryColor'], [
-            'group' => 'theme',
-            'label' => 'Warna Utama',
-            'type' => AppSetting::TYPE_STRING,
-            'is_public' => true,
-            'sort_order' => 1,
-        ]);
-
-        AppSetting::putValue('app.timezone', $validated['appTimezone'], [
-            'group' => 'system',
-            'label' => 'Zona Waktu Aplikasi',
-            'type' => AppSetting::TYPE_STRING,
-            'is_public' => false,
-            'sort_order' => 1,
-        ]);
-        AppClock::applyConfiguredTimezone();
-
-        AppSetting::putValue('queue.default_service_minutes', $validated['defaultServiceMinutes'], [
-            'group' => 'queue',
-            'label' => 'Estimasi Awal Pelayanan Per Pendaftar',
-            'type' => AppSetting::TYPE_INTEGER,
-            'is_public' => false,
-            'sort_order' => 1,
-        ]);
-
-        AppSetting::putValue('queue.daily_quota_enabled', $validated['dailyQuotaEnabled'], [
-            'group' => 'queue',
-            'label' => 'Aktifkan Quota Harian',
-            'type' => AppSetting::TYPE_BOOLEAN,
-            'is_public' => false,
-            'sort_order' => 2,
-        ]);
-
-        AppSetting::putValue('queue.daily_quota_limit', $validated['dailyQuotaLimit'], [
-            'group' => 'queue',
-            'label' => 'Total Quota Harian',
-            'type' => AppSetting::TYPE_INTEGER,
-            'is_public' => false,
-            'sort_order' => 3,
-        ]);
-
-        AppSetting::putValue('queue.qr_expiry_limit_enabled', $validated['qrExpiryLimitEnabled'], [
-            'group' => 'queue',
-            'label' => 'Aktifkan Batas Durasi QR dan Kode Manual',
-            'type' => AppSetting::TYPE_BOOLEAN,
-            'is_public' => false,
-            'sort_order' => 4,
-        ]);
-
-        AppSetting::putValue('queue.qr_expiry_limit_hours', $validated['qrExpiryLimitHours'], [
-            'group' => 'queue',
-            'label' => 'Batas Durasi QR dan Kode Manual Dalam Jam',
-            'type' => AppSetting::TYPE_INTEGER,
-            'is_public' => false,
-            'sort_order' => 5,
-        ]);
-
-        AppSetting::putValue('queue.qr_auto_regenerate_enabled', $validated['qrAutoRegenerateEnabled'], [
-            'group' => 'queue',
-            'label' => 'QR dan Kode Manual Otomatis Berubah Saat Kedaluwarsa',
-            'type' => AppSetting::TYPE_BOOLEAN,
-            'is_public' => false,
-            'sort_order' => 6,
-        ]);
-
-        $this->syncCurrentSessionDailyQuotas(
-            (bool) $validated['dailyQuotaEnabled'],
-            (int) $validated['dailyQuotaLimit'],
-        );
-
-        session()->flash('status', 'Pengaturan aplikasi berhasil disimpan.');
-        $this->logoUpload = null;
-        $this->faviconUpload = null;
-        $this->loadForm();
     }
 
     private function loadForm(): void
@@ -244,6 +261,11 @@ class ApplicationSettings extends Component
 
                 $runtime->ensureAllocations($service, $session);
             });
+    }
+
+    private function notify(string $type, string $message): void
+    {
+        $this->dispatch('settings-notify', type: $type, message: $message);
     }
 
     public function render()

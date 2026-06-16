@@ -172,6 +172,25 @@
             background: #fff;
         }
 
+        .settings-toast {
+            position: fixed;
+            left: 14px;
+            right: 14px;
+            bottom: 98px;
+            z-index: 80;
+            display: none;
+            border-radius: 8px;
+            padding: 12px 14px;
+            color: #fff;
+            font-weight: 800;
+            line-height: 1.35;
+            box-shadow: 0 16px 34px rgba(15, 23, 42, .24);
+        }
+
+        .settings-toast.is-visible { display: block; }
+        .settings-toast.success { background: var(--success); }
+        .settings-toast.error { background: var(--danger); }
+
         @media (max-width: 420px) {
             .settings-switch-row {
                 align-items: flex-start;
@@ -207,6 +226,7 @@
     @endphp
 
     @error('settings') <div class="alert alert-danger">{{ $message }}</div> @enderror
+    <div id="settingsToast" class="settings-toast" role="status" aria-live="polite"></div>
 
     <section class="panel settings-card">
         <div class="settings-card-head">
@@ -382,5 +402,26 @@
         <span wire:loading.remove wire:target="save">Simpan Pengaturan</span>
         <span wire:loading wire:target="save">Menyimpan...</span>
     </button>
+
+    <script>
+        document.addEventListener('livewire:init', () => {
+            Livewire.on('settings-notify', (payload) => {
+                const event = Array.isArray(payload) ? payload[0] : payload;
+                const toast = document.getElementById('settingsToast');
+
+                if (! toast || ! event) {
+                    return;
+                }
+
+                toast.textContent = event.message || 'Proses selesai.';
+                toast.className = 'settings-toast is-visible ' + (event.type === 'error' ? 'error' : 'success');
+
+                window.clearTimeout(window.__settingsToastTimer);
+                window.__settingsToastTimer = window.setTimeout(() => {
+                    toast.className = 'settings-toast';
+                }, 3000);
+            });
+        });
+    </script>
 
 </div>

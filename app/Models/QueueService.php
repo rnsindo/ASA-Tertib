@@ -13,12 +13,14 @@ class QueueService extends Model
         'code',
         'description',
         'sort_order',
+        'enforce_call_order',
         'is_active',
     ];
 
     protected function casts(): array
     {
         return [
+            'enforce_call_order' => 'boolean',
             'is_active' => 'boolean',
         ];
     }

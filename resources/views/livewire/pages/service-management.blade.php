@@ -522,6 +522,17 @@
 
                     <div class="switch-line">
                         <span>
+                            <strong>Wajib Panggil Berurutan</strong>
+                            <span class="muted" style="font-size: 12px;">Jika nonaktif, petugas bisa memanggil atau memulai nomor menunggu secara acak.</span>
+                        </span>
+                        <label class="switch" aria-label="Wajib panggil berurutan">
+                            <input type="checkbox" wire:model="serviceEnforceCallOrder">
+                            <span class="switch-track"></span>
+                        </label>
+                    </div>
+
+                    <div class="switch-line">
+                        <span>
                             <strong>Wajib Melewati Layanan Lain</strong>
                             <span class="muted" style="font-size: 12px;">Aktifkan jika antrian layanan ini hanya boleh diambil setelah layanan prasyarat terpenuhi.</span>
                         </span>

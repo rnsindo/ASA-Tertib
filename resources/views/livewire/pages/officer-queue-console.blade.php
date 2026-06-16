@@ -604,7 +604,7 @@
         <section class="panel stack section-active">
             <div>
                 <h2 class="title" style="font-size: 20px;">Antrian Loket Ini</h2>
-                <p class="subtitle">Antrian aktif pada {{ $selectedCounter->name }}. Tombol panggil hanya muncul pada nomor menunggu paling awal.</p>
+                <p class="subtitle">Antrian aktif pada {{ $selectedCounter->name }}. Layanan berurutan hanya bisa memanggil nomor menunggu paling awal; layanan acak bisa dipanggil atau dimulai langsung.</p>
             </div>
 
             @if($activeTickets->isEmpty())
@@ -612,6 +612,13 @@
             @else
                 <div class="ticket-list">
                     @foreach($activeTickets as $ticket)
+                        @php
+                            $enforceCallOrder = $ticket->service?->enforce_call_order ?? true;
+                            $canCallTicket = $ticket->status === \App\Models\QueueTicket::STATUS_WAITING
+                                && (! $enforceCallOrder || $ticket->id === $firstWaitingTicketId);
+                            $canStartTicket = $ticket->status === \App\Models\QueueTicket::STATUS_CALLED
+                                || ($ticket->status === \App\Models\QueueTicket::STATUS_WAITING && ! $enforceCallOrder);
+                        @endphp
                         <article class="ticket-card {{ $ticket->id === $firstWaitingTicketId ? 'is-current' : '' }}" wire:key="active-ticket-{{ $ticket->id }}">
                             <div class="ticket-card-head">
                                 <div class="ticket-number">
@@ -632,17 +639,19 @@
                             </div>
 
                             <div class="ticket-actions">
-                                @if($ticket->id === $firstWaitingTicketId)
+                                @if($canCallTicket)
                                     <button type="button" class="btn btn-primary btn-small" wire:click="callTicket({{ $ticket->id }})">
                                         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 7h18s-3 0-3-7"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>
                                         Panggil
                                     </button>
                                 @endif
-                                @if($ticket->status === \App\Models\QueueTicket::STATUS_CALLED)
+                                @if($canStartTicket)
                                     <button type="button" class="btn btn-outline btn-small" wire:click="startTicket({{ $ticket->id }})">
                                         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3l14 9-14 9V3Z"/></svg>
                                         Mulai
                                     </button>
+                                @endif
+                                @if($ticket->status === \App\Models\QueueTicket::STATUS_CALLED)
                                     <button type="button" class="btn btn-outline btn-small" wire:click="markNoShow({{ $ticket->id }})">
                                         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><path d="M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z"/><path d="M17 8l5 5"/><path d="M22 8l-5 5"/></svg>
                                         Tidak di Tempat

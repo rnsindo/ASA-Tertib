@@ -264,7 +264,7 @@ class OfficerQueueConsole extends Component
 
     public function callTicket(int $ticketId): void
     {
-        $ticket = QueueTicket::with('counter')->findOrFail($ticketId);
+        $ticket = QueueTicket::with(['counter', 'service'])->findOrFail($ticketId);
         $this->authorizeTicketCounter($ticket);
 
         if ($ticket->status !== QueueTicket::STATUS_WAITING || ! $ticket->counter) {
@@ -275,7 +275,7 @@ class OfficerQueueConsole extends Component
 
         $firstWaitingTicketId = $this->waitingTicketsForCounter($ticket->counter)->value('id');
 
-        if ((int) $firstWaitingTicketId !== (int) $ticket->id) {
+        if (($ticket->service?->enforce_call_order ?? true) && (int) $firstWaitingTicketId !== (int) $ticket->id) {
             $this->addError('notes', 'Tombol panggil hanya berlaku untuk antrian paling awal pada loket ini.');
 
             return;
@@ -290,8 +290,17 @@ class OfficerQueueConsole extends Component
 
     public function startTicket(int $ticketId): void
     {
-        $ticket = QueueTicket::findOrFail($ticketId);
+        $ticket = QueueTicket::with('service')->findOrFail($ticketId);
         $this->authorizeTicketCounter($ticket);
+
+        $canStart = $ticket->status === QueueTicket::STATUS_CALLED
+            || ($ticket->status === QueueTicket::STATUS_WAITING && ! ($ticket->service?->enforce_call_order ?? true));
+
+        if (! $canStart) {
+            $this->addError('notes', 'Tiket ini belum bisa dimulai. Panggil nomor terlebih dahulu atau ubah aturan layanan menjadi acak.');
+
+            return;
+        }
 
         $ticket->update([
             'status' => QueueTicket::STATUS_IN_PROGRESS,
