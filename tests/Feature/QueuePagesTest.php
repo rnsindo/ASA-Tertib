@@ -916,7 +916,7 @@ class QueuePagesTest extends TestCase
             ->assertDontSee('Bukan Pelanggan');
     }
 
-    public function test_officer_assigns_applicant_through_service_modal_to_lightest_counter(): void
+    public function test_officer_assigns_applicant_through_service_modal_to_selected_counter(): void
     {
         Role::firstOrCreate(['name' => 'officer']);
         Permission::firstOrCreate(['name' => 'petugas.arahkan_pendaftar']);
@@ -1008,7 +1008,10 @@ class QueuePagesTest extends TestCase
             ->assertSee('Layanan Modal - Kuota 1 / 20')
             ->assertDontSee('rekomendasi')
             ->set('assigningServiceId', $service->id)
-            ->assertSee('Sistem akan memilih loket yang buka dengan beban paling ringan')
+            ->assertSee('Pilih loket tujuan')
+            ->assertSee('Layanan Modal - Loket Modal Ramai')
+            ->assertSee('Layanan Modal - Loket Modal Ringan')
+            ->set('assigningCounterId', $busyCounter->id)
             ->call('confirmAssignApplicantToService')
             ->assertHasNoErrors()
             ->assertSet('assigningApplicantId', null);
@@ -1016,7 +1019,7 @@ class QueuePagesTest extends TestCase
         $this->assertDatabaseHas('queue_tickets', [
             'applicant_id' => $applicant->id,
             'queue_service_id' => $service->id,
-            'service_counter_id' => $lightCounter->id,
+            'service_counter_id' => $busyCounter->id,
             'status' => QueueTicket::STATUS_WAITING,
         ]);
     }
@@ -2807,7 +2810,7 @@ class QueuePagesTest extends TestCase
         ]);
     }
 
-    public function test_full_quota_blocks_only_that_service(): void
+    public function test_officer_direction_can_bypass_full_quota_for_exceptional_assignment(): void
     {
         Role::firstOrCreate(['name' => 'officer']);
         Permission::firstOrCreate(['name' => 'petugas.arahkan_pendaftar']);
@@ -2908,20 +2911,17 @@ class QueuePagesTest extends TestCase
 
         Livewire::actingAs($officer)
             ->test(OfficerQueueConsole::class)
-            ->set('selectedCounterId', $fullCounter->id)
-            ->call('assignToSelectedCounter', $applicant->id)
-            ->assertHasErrors(['search']);
-
-        Livewire::actingAs($officer)
-            ->test(OfficerQueueConsole::class)
-            ->set('selectedCounterId', $openCounter->id)
-            ->call('assignToSelectedCounter', $applicant->id)
+            ->call('openAssignServiceModal', $applicant->id)
+            ->set('assigningServiceId', $fullService->id)
+            ->set('assigningCounterId', $fullCounter->id)
+            ->assertSee('Kuota layanan sudah penuh')
+            ->call('confirmAssignApplicantToService')
             ->assertHasNoErrors();
 
         $this->assertDatabaseHas('queue_tickets', [
             'applicant_id' => $applicant->id,
-            'queue_service_id' => $openService->id,
-            'service_counter_id' => $openCounter->id,
+            'queue_service_id' => $fullService->id,
+            'service_counter_id' => $fullCounter->id,
         ]);
     }
 
@@ -3017,7 +3017,7 @@ class QueuePagesTest extends TestCase
         ]);
     }
 
-    public function test_counter_allocation_recommends_under_target_counter(): void
+    public function test_non_modal_officer_assignment_still_uses_allocation_recommendation(): void
     {
         Role::firstOrCreate(['name' => 'officer']);
         Permission::firstOrCreate(['name' => 'petugas.arahkan_pendaftar']);

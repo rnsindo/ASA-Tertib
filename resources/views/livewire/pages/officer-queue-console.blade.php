@@ -862,16 +862,32 @@
                         @php($selectedAssignmentStatus = $assignmentServiceStatuses->get((int) $assigningServiceId))
                         <div class="scroll-status" style="text-align: left;">
                             @if($selectedAssignmentStatus['can_queue'] ?? false)
-                                Sistem akan memilih loket yang buka dengan beban paling ringan saat pendaftar dimasukkan.
+                                Pilih loket tujuan. Kuota layanan hanya menjadi informasi dan tidak membatasi aksi khusus panitia ini.
+                                @if($selectedAssignmentStatus['quota']['is_full'] ?? false)
+                                    Kuota layanan sudah penuh, tetapi pendaftar tetap dapat dimasukkan oleh panitia untuk keadaan tertentu.
+                                @endif
                             @else
                                 {{ $selectedAssignmentStatus['unavailable_message'] ?? 'Layanan belum dapat diambil.' }}
                             @endif
                         </div>
                     @else
                         <div class="scroll-status" style="text-align: left;">
-                            Pilih layanan terlebih dahulu. Sistem akan mencari loket yang buka dengan jumlah antrian/pengunjung paling ringan.
+                            Pilih layanan terlebih dahulu, lalu pilih loket tujuan yang akan menerima pendaftar.
                         </div>
                     @endif
+
+                    <div class="field">
+                        <label for="assigningCounterId">Pilih Loket Tujuan</label>
+                        <select id="assigningCounterId" class="select" wire:model.live="assigningCounterId" data-autocomplete-select data-autocomplete-placeholder="Cari loket" @disabled(! $assigningServiceId || ! ($assignmentServiceStatuses->get((int) $assigningServiceId)['can_queue'] ?? false))>
+                            <option value="">Pilih loket tujuan</option>
+                            @foreach($assignmentCounters as $counter)
+                                <option value="{{ $counter->id }}">
+                                    {{ $counter->service?->name }} - {{ $counter->name }}
+                                </option>
+                            @endforeach
+                        </select>
+                        @error('assigningCounterId') <span class="error">{{ $message }}</span> @enderror
+                    </div>
 
                     <div class="field">
                         <label for="assignNotes">Catatan</label>

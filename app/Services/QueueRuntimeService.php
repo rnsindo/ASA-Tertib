@@ -376,7 +376,7 @@ class QueueRuntimeService
         return $best;
     }
 
-    public function canCreateTicket(Applicant $applicant, QueueService $service, ?QueueSession $session = null, ?int $ignoreTicketId = null): array
+    public function canCreateTicket(Applicant $applicant, QueueService $service, ?QueueSession $session = null, ?int $ignoreTicketId = null, bool $ignoreQuota = false): array
     {
         $session ??= $this->currentSession();
 
@@ -421,10 +421,12 @@ class QueueRuntimeService
             return [false, 'Anda masih memiliki antrian aktif atau terlewat di layanan ' . ($otherActiveTicket->service?->name ?? 'lain') . '. Silakan selesaikan dahulu sebelum mengambil antrian layanan lain.'];
         }
 
-        $quotaStatus = $this->quotaStatus($service, $session);
+        if (! $ignoreQuota) {
+            $quotaStatus = $this->quotaStatus($service, $session);
 
-        if ($quotaStatus['is_full']) {
-            return [false, 'Antrian layanan ' . $service->name . ' sudah penuh untuk hari ini. Registrasi pendaftar tetap tersimpan, tetapi belum bisa mengambil antrian layanan ini. Silakan hubungi petugas atau kembali pada jadwal layanan berikutnya.'];
+            if ($quotaStatus['is_full']) {
+                return [false, 'Antrian layanan ' . $service->name . ' sudah penuh untuk hari ini. Registrasi pendaftar tetap tersimpan, tetapi belum bisa mengambil antrian layanan ini. Silakan hubungi petugas atau kembali pada jadwal layanan berikutnya.'];
+            }
         }
 
         if ($dependencyMessage = $this->dependencyError($applicant, $service, $session)) {
@@ -442,11 +444,18 @@ class QueueRuntimeService
         ?int $fromCounterId = null,
         ?string $notes = null,
         ?QueueSession $session = null,
+        bool $forcePreferredCounter = false,
     ): QueueTicket {
         $session ??= $this->currentSession();
 
-        return DB::transaction(function () use ($applicant, $service, $preferredCounter, $assignedBy, $fromCounterId, $notes, $session): QueueTicket {
-            $counter = $this->recommendedCounter($service, $preferredCounter, $session);
+        return DB::transaction(function () use ($applicant, $service, $preferredCounter, $assignedBy, $fromCounterId, $notes, $session, $forcePreferredCounter): QueueTicket {
+            $counter = null;
+
+            if ($forcePreferredCounter && $preferredCounter && $preferredCounter->queue_service_id === $service->id && $preferredCounter->is_active) {
+                $counter = $preferredCounter;
+            }
+
+            $counter ??= $this->recommendedCounter($service, $preferredCounter, $session);
 
             if (! $counter) {
                 throw new \RuntimeException('Belum ada loket aktif untuk layanan ' . $service->name . '.');

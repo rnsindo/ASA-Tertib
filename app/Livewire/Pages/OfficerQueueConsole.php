@@ -34,6 +34,7 @@ class OfficerQueueConsole extends Component
     public ?int $transferTicketId = null;
     public ?int $assigningApplicantId = null;
     public ?int $assigningServiceId = null;
+    public ?int $assigningCounterId = null;
     public string $search = '';
     public string $noShowSearch = '';
     public int $visibleApplicantCount = self::APPLICANT_BATCH_SIZE;
@@ -73,6 +74,7 @@ class OfficerQueueConsole extends Component
         $this->transferTicketId = null;
         $this->assigningApplicantId = null;
         $this->assigningServiceId = null;
+        $this->assigningCounterId = null;
     }
 
     public function updatedSearch(): void
@@ -92,7 +94,14 @@ class OfficerQueueConsole extends Component
 
     public function updatedAssigningServiceId(): void
     {
+        $this->assigningCounterId = null;
         $this->resetErrorBag('assigningServiceId');
+        $this->resetErrorBag('assigningCounterId');
+    }
+
+    public function updatedAssigningCounterId(): void
+    {
+        $this->resetErrorBag('assigningCounterId');
     }
 
     public function loadMoreApplicants(): void
@@ -175,14 +184,18 @@ class OfficerQueueConsole extends Component
 
         $this->assigningApplicantId = $applicant->id;
         $this->assigningServiceId = null;
+        $this->assigningCounterId = null;
         $this->resetErrorBag('assigningServiceId');
+        $this->resetErrorBag('assigningCounterId');
     }
 
     public function closeAssignServiceModal(): void
     {
         $this->assigningApplicantId = null;
         $this->assigningServiceId = null;
+        $this->assigningCounterId = null;
         $this->resetErrorBag('assigningServiceId');
+        $this->resetErrorBag('assigningCounterId');
     }
 
     public function confirmAssignApplicantToService(): void
@@ -201,6 +214,12 @@ class OfficerQueueConsole extends Component
             return;
         }
 
+        if (! $this->assigningCounterId) {
+            $this->addError('assigningCounterId', 'Pilih loket tujuan.');
+
+            return;
+        }
+
         $queueRuntime = app(QueueRuntimeService::class);
         $currentSession = $queueRuntime->currentSession();
         $applicant = Applicant::findOrFail($this->assigningApplicantId);
@@ -214,18 +233,21 @@ class OfficerQueueConsole extends Component
             return;
         }
 
-        [$canCreate, $message] = $queueRuntime->canCreateTicket($applicant, $service, $currentSession);
+        $counter = ServiceCounter::query()
+            ->where('queue_service_id', $service->id)
+            ->where('is_active', true)
+            ->find($this->assigningCounterId);
 
-        if (! $canCreate) {
-            $this->addError('assigningServiceId', $message);
+        if (! $counter) {
+            $this->addError('assigningCounterId', 'Loket tujuan tidak tersedia, tidak sesuai layanan, atau sedang ditutup.');
 
             return;
         }
 
-        $counter = $queueRuntime->recommendedCounter($service, null, $currentSession);
+        [$canCreate, $message] = $queueRuntime->canCreateTicket($applicant, $service, $currentSession, null, true);
 
-        if (! $counter) {
-            $this->addError('assigningServiceId', 'Belum ada loket yang buka untuk layanan ' . $service->name . '. Buka minimal satu loket terlebih dahulu.');
+        if (! $canCreate) {
+            $this->addError('assigningServiceId', $message);
 
             return;
         }
@@ -238,6 +260,7 @@ class OfficerQueueConsole extends Component
             null,
             $this->notes ?: null,
             $currentSession,
+            true,
         );
 
         session()->flash('status', 'Pendaftar dimasukkan ke ' . $counter->name . ' untuk layanan ' . $service->name . ' dengan nomor ' . $ticket->ticket_code . '.');
@@ -622,6 +645,7 @@ class OfficerQueueConsole extends Component
         } else {
             $this->assigningApplicantId = null;
             $this->assigningServiceId = null;
+            $this->assigningCounterId = null;
             $applicants = collect();
             $totalApplicants = 0;
             $presenceByApplicantId = collect();
@@ -676,17 +700,28 @@ class OfficerQueueConsole extends Component
                 ->get()
             : collect();
 
+        $assignmentCounters = ($canDirectApplicants && $this->assigningServiceId)
+            ? ServiceCounter::query()
+                ->with('service')
+                ->where('queue_service_id', $this->assigningServiceId)
+                ->where('is_active', true)
+                ->orderBy('sort_order')
+                ->orderBy('name')
+                ->get()
+            : collect();
+
         $assignmentServiceStatuses = $assignmentServices->mapWithKeys(function (QueueService $service) use ($queueRuntime, $currentSession, $assigningApplicant): array {
             $quota = $queueRuntime->quotaStatus($service, $currentSession);
             $dependencyError = $assigningApplicant ? $queueRuntime->dependencyError($assigningApplicant, $service, $currentSession) : null;
-            $recommendedCounter = $queueRuntime->recommendedCounter($service, null, $currentSession);
+            $hasActiveCounter = ServiceCounter::query()
+                ->where('queue_service_id', $service->id)
+                ->where('is_active', true)
+                ->exists();
             $unavailableMessage = null;
 
-            if ($quota['is_full'] ?? false) {
-                $unavailableMessage = 'Kuota layanan penuh.';
-            } elseif ($dependencyError) {
+            if ($dependencyError) {
                 $unavailableMessage = $dependencyError;
-            } elseif (! $recommendedCounter) {
+            } elseif (! $hasActiveCounter) {
                 $unavailableMessage = 'Belum ada loket yang buka.';
             }
 
@@ -694,7 +729,7 @@ class OfficerQueueConsole extends Component
                 $service->id => [
                     'quota' => $quota,
                     'dependency_error' => $dependencyError,
-                    'recommended_counter' => $recommendedCounter,
+                    'has_active_counter' => $hasActiveCounter,
                     'can_queue' => $unavailableMessage === null,
                     'unavailable_message' => $unavailableMessage,
                 ],
@@ -766,6 +801,7 @@ class OfficerQueueConsole extends Component
             'transferTicket' => $transferTicket,
             'assigningApplicant' => $assigningApplicant,
             'assignmentServices' => $assignmentServices,
+            'assignmentCounters' => $assignmentCounters,
             'assignmentServiceStatuses' => $assignmentServiceStatuses,
             'noShowTickets' => $noShowTickets,
         ]);

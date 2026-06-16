@@ -97,7 +97,8 @@
 - Menambahkan aturan per layanan `Wajib Panggil Berurutan`; default aktif, dan jika dinonaktifkan petugas dapat memanggil atau memulai tiket menunggu secara acak pada dashboard `/petugas`.
 - Menambahkan permission `petugas.arahkan_pendaftar` untuk melindungi section `Arahkan Pendaftar ke Loket` pada dashboard petugas; permission ini tidak menjadi bawaan role Petugas.
 - Memperjelas UX quota penuh pada dashboard pendaftar: registrasi tetap tersimpan, layanan penuh tetap tampil, tombol `Ambil Antrian` menampilkan pesan penuh dan tidak membuka scanner QR/kode.
-- Mengubah `Arahkan Pendaftar ke Loket` pada dashboard petugas: tombol `Masukkan` membuka modal pilih layanan, lalu sistem otomatis memilih loket buka dengan beban paling ringan.
+- Mengubah `Arahkan Pendaftar ke Loket` pada dashboard petugas: tombol `Masukkan` membuka modal pilih layanan dan loket tujuan, lalu memasukkan pendaftar langsung ke loket pilihan panitia.
+- Membuat aksi khusus panitia pada `Arahkan Pendaftar ke Loket` mengabaikan batas kuota harian tanpa mengubah aturan kuota untuk dashboard pendaftar.
 - Mengubah perhitungan target quota loket agar saat quota harian aktif, target per loket dihitung dari quota harian dibagi seluruh loket layanan, termasuk loket yang sedang tutup/nonaktif.
 - Menambahkan permission `petugas.kelola_qr_antrian` untuk melindungi tombol `Buat/Ganti QR & Kode` pada dashboard petugas; permission ini tersedia di seeder tetapi tidak menjadi bawaan role `Petugas`.
 - Mengubah seluruh field select menjadi autocomplete mobile-friendly dengan pencarian dan batas tampilan maksimal 5 opsi.
