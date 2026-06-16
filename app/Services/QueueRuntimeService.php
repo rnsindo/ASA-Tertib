@@ -451,7 +451,11 @@ class QueueRuntimeService
         return DB::transaction(function () use ($applicant, $service, $preferredCounter, $assignedBy, $fromCounterId, $notes, $session, $forcePreferredCounter): QueueTicket {
             $counter = null;
 
-            if ($forcePreferredCounter && $preferredCounter && $preferredCounter->queue_service_id === $service->id && $preferredCounter->is_active) {
+            if ($forcePreferredCounter) {
+                if (! $preferredCounter || $preferredCounter->queue_service_id !== $service->id || ! $preferredCounter->is_active) {
+                    throw new \RuntimeException('Loket tujuan tidak tersedia, tidak sesuai layanan, atau sedang ditutup.');
+                }
+
                 $counter = $preferredCounter;
             }
 

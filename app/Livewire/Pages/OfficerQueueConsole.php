@@ -244,7 +244,12 @@ class OfficerQueueConsole extends Component
             return;
         }
 
-        [$canCreate, $message] = $queueRuntime->canCreateTicket($applicant, $service, $currentSession, null, true);
+        [$canCreate, $message] = $queueRuntime->canCreateTicket(
+            $applicant,
+            $service,
+            $currentSession,
+            ignoreQuota: true,
+        );
 
         if (! $canCreate) {
             $this->addError('assigningServiceId', $message);
@@ -260,7 +265,7 @@ class OfficerQueueConsole extends Component
             null,
             $this->notes ?: null,
             $currentSession,
-            true,
+            forcePreferredCounter: true,
         );
 
         session()->flash('status', 'Pendaftar dimasukkan ke ' . $counter->name . ' untuk layanan ' . $service->name . ' dengan nomor ' . $ticket->ticket_code . '.');
@@ -491,6 +496,7 @@ class OfficerQueueConsole extends Component
                 auth()->user(),
                 $ticket->service_counter_id,
                 $this->notes ?: null,
+                forcePreferredCounter: true,
             );
         });
 

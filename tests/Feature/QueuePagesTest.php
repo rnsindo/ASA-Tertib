@@ -960,7 +960,7 @@ class QueuePagesTest extends TestCase
         ServiceDailyQuota::create([
             'queue_session_id' => $session->id,
             'queue_service_id' => $service->id,
-            'max_daily_quota' => 20,
+            'max_daily_quota' => 2,
             'is_open' => true,
         ]);
 
@@ -1005,7 +1005,7 @@ class QueuePagesTest extends TestCase
             ->call('openAssignServiceModal', $applicant->id)
             ->assertSet('assigningApplicantId', $applicant->id)
             ->assertSee('Masukkan ke Layanan')
-            ->assertSee('Layanan Modal - Kuota 1 / 20')
+            ->assertSee('Layanan Modal - Kuota 1 / 2')
             ->assertDontSee('rekomendasi')
             ->set('assigningServiceId', $service->id)
             ->assertSee('Pilih loket tujuan')
@@ -1059,7 +1059,22 @@ class QueuePagesTest extends TestCase
             'is_active' => true,
         ]);
 
+        $counterThree = ServiceCounter::create([
+            'queue_service_id' => $service->id,
+            'name' => 'Loket Panggil 3',
+            'code' => 'LP-3',
+            'sort_order' => 3,
+            'is_active' => true,
+        ]);
+
         $session = app(QueueRuntimeService::class)->currentSession();
+
+        ServiceDailyQuota::create([
+            'queue_session_id' => $session->id,
+            'queue_service_id' => $service->id,
+            'max_daily_quota' => 6,
+            'is_open' => true,
+        ]);
 
         $tickets = collect(range(1, 2))->map(function (int $number) use ($service, $counterOne, $session): QueueTicket {
             $user = User::factory()->create([
@@ -1099,6 +1114,36 @@ class QueuePagesTest extends TestCase
             ]);
         })->values();
 
+        collect(range(1, 2))->each(function (int $number) use ($service, $counterTwo, $session): void {
+            $user = User::factory()->create([
+                'email' => "call-transfer-existing-{$number}@example.test",
+                'password' => 'password123',
+            ]);
+
+            $applicant = Applicant::create([
+                'user_id' => $user->id,
+                'full_name' => "Pendaftar Existing Transfer {$number}",
+                'school_origin' => 'SMP Existing Transfer',
+                'nisn' => '882299000' . $number,
+                'whatsapp' => '08882299000' . $number,
+                'status' => 'registered',
+            ]);
+
+            QueueTicket::create([
+                'applicant_id' => $applicant->id,
+                'queue_session_id' => $session->id,
+                'queue_service_id' => $service->id,
+                'service_counter_id' => $counterTwo->id,
+                'queue_date' => $session->session_date,
+                'queue_number' => 10 + $number,
+                'call_sequence' => (10 + $number) * 1000,
+                'ticket_code' => 'LP-' . str_pad((string) (10 + $number), 3, '0', STR_PAD_LEFT),
+                'status' => QueueTicket::STATUS_COMPLETED,
+                'assigned_at' => now()->subMinutes($number),
+                'completed_at' => now()->subMinutes($number),
+            ]);
+        });
+
         Livewire::actingAs($officer)
             ->test(OfficerQueueConsole::class)
             ->assertSee('SMP Panggil')
@@ -1129,6 +1174,12 @@ class QueuePagesTest extends TestCase
         $this->assertDatabaseHas('queue_tickets', [
             'applicant_id' => $tickets[1]->applicant_id,
             'service_counter_id' => $counterTwo->id,
+            'status' => QueueTicket::STATUS_WAITING,
+        ]);
+
+        $this->assertDatabaseMissing('queue_tickets', [
+            'applicant_id' => $tickets[1]->applicant_id,
+            'service_counter_id' => $counterThree->id,
             'status' => QueueTicket::STATUS_WAITING,
         ]);
     }
