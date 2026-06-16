@@ -1185,6 +1185,64 @@ class QueuePagesTest extends TestCase
         ]);
     }
 
+    public function test_forced_counter_accepts_mysql_style_string_foreign_key(): void
+    {
+        $officer = User::factory()->create([
+            'email' => 'forced-counter-officer@example.test',
+            'password' => 'password123',
+        ]);
+
+        $service = QueueService::create([
+            'name' => 'Layanan String FK',
+            'slug' => 'layanan-string-fk',
+            'code' => 'LSF',
+            'sort_order' => 1,
+            'is_active' => true,
+        ]);
+
+        $counter = ServiceCounter::create([
+            'queue_service_id' => $service->id,
+            'assigned_user_id' => $officer->id,
+            'name' => 'Loket String FK',
+            'code' => 'LSF-1',
+            'sort_order' => 1,
+            'is_active' => false,
+        ]);
+
+        $counter->setRawAttributes(array_merge($counter->getAttributes(), [
+            'queue_service_id' => (string) $service->id,
+        ]), true);
+
+        $user = User::factory()->create(['email' => 'forced-counter-applicant@example.test']);
+        $applicant = Applicant::create([
+            'user_id' => $user->id,
+            'full_name' => 'Pendaftar String FK',
+            'school_origin' => 'SMP String FK',
+            'nisn' => '8800990011',
+            'whatsapp' => '08800990011',
+            'status' => 'registered',
+        ]);
+
+        $session = app(QueueRuntimeService::class)->currentSession();
+
+        app(QueueRuntimeService::class)->createTicket(
+            $applicant,
+            $service,
+            $counter,
+            $officer,
+            null,
+            null,
+            $session,
+            forcePreferredCounter: true,
+        );
+
+        $this->assertDatabaseHas('queue_tickets', [
+            'applicant_id' => $applicant->id,
+            'queue_service_id' => $service->id,
+            'service_counter_id' => $counter->id,
+        ]);
+    }
+
     public function test_officer_can_call_and_start_random_waiting_ticket_when_service_allows_random_order(): void
     {
         Role::firstOrCreate(['name' => 'officer']);

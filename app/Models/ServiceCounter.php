@@ -20,6 +20,9 @@ class ServiceCounter extends Model
     protected function casts(): array
     {
         return [
+            'queue_service_id' => 'integer',
+            'assigned_user_id' => 'integer',
+            'sort_order' => 'integer',
             'is_active' => 'boolean',
         ];
     }

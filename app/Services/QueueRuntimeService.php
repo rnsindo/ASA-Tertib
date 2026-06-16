@@ -365,7 +365,7 @@ class QueueRuntimeService
 
         $best = $ranked->first()['counter'] ?? null;
 
-        if ($preferredCounter && $preferredCounter->queue_service_id === $service->id) {
+        if ($preferredCounter && (int) $preferredCounter->queue_service_id === (int) $service->id) {
             $preferredStatus = $this->allocationStatus($preferredCounter, $session);
 
             if ($preferredStatus['target'] === null || $preferredStatus['used'] < $preferredStatus['target']) {
@@ -452,7 +452,7 @@ class QueueRuntimeService
             $counter = null;
 
             if ($forcePreferredCounter) {
-                if (! $preferredCounter || $preferredCounter->queue_service_id !== $service->id) {
+                if (! $preferredCounter || (int) $preferredCounter->queue_service_id !== (int) $service->id) {
                     throw new \RuntimeException('Loket tujuan tidak tersedia atau tidak sesuai layanan.');
                 }
 

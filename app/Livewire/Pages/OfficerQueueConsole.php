@@ -473,26 +473,32 @@ class OfficerQueueConsole extends Component
             return;
         }
 
-        DB::transaction(function () use ($ticketId, $targetCounter) {
-            $ticket = QueueTicket::with('applicant')->lockForUpdate()->findOrFail($ticketId);
+        try {
+            DB::transaction(function () use ($ticketId, $targetCounter) {
+                $ticket = QueueTicket::with('applicant')->lockForUpdate()->findOrFail($ticketId);
 
-            $ticket->update([
-                'status' => QueueTicket::STATUS_TRANSFERRED,
-                'transferred_from_counter_id' => $ticket->service_counter_id,
-                'handled_by' => auth()->id(),
-                'notes' => trim(($ticket->notes ? $ticket->notes . "\n" : '') . 'Dipindahkan ke ' . $targetCounter->code),
-            ]);
+                $ticket->update([
+                    'status' => QueueTicket::STATUS_TRANSFERRED,
+                    'transferred_from_counter_id' => $ticket->service_counter_id,
+                    'handled_by' => auth()->id(),
+                    'notes' => trim(($ticket->notes ? $ticket->notes . "\n" : '') . 'Dipindahkan ke ' . $targetCounter->code),
+                ]);
 
-            app(QueueRuntimeService::class)->createTicket(
-                $ticket->applicant,
-                $targetCounter->service,
-                $targetCounter,
-                auth()->user(),
-                $ticket->service_counter_id,
-                $this->notes ?: null,
-                forcePreferredCounter: true,
-            );
-        });
+                app(QueueRuntimeService::class)->createTicket(
+                    $ticket->applicant,
+                    $targetCounter->service,
+                    $targetCounter,
+                    auth()->user(),
+                    $ticket->service_counter_id,
+                    $this->notes ?: null,
+                    forcePreferredCounter: true,
+                );
+            });
+        } catch (\Throwable $exception) {
+            $this->addError('transferTargetCounterId', $exception->getMessage() ?: 'Gagal memindahkan tiket ke loket tujuan.');
+
+            return;
+        }
 
         $this->notes = '';
         $this->transferTargetCounterId = null;
