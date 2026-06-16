@@ -935,7 +935,7 @@
                             <option value="">Pilih loket tujuan</option>
                             @foreach($transferCounters as $counter)
                                 <option value="{{ $counter->id }}" @disabled($transferTicket->service_counter_id === $counter->id)>
-                                    {{ $counter->service?->name }} - {{ $counter->name }}{{ $transferTicket->service_counter_id === $counter->id ? ' - loket saat ini' : '' }}
+                                    {{ $counter->service?->name }} - {{ $counter->name }}{{ ! $counter->is_active ? ' - tutup' : '' }}{{ $transferTicket->service_counter_id === $counter->id ? ' - loket saat ini' : '' }}
                                 </option>
                             @endforeach
                         </select>

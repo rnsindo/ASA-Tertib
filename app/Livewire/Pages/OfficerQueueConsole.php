@@ -460,12 +460,6 @@ class OfficerQueueConsole extends Component
             return;
         }
 
-        if (! $targetCounter->is_active) {
-            $this->addError('transferTargetCounterId', 'Loket tujuan sedang ditutup.');
-
-            return;
-        }
-
         [$canCreate, $message] = $queueRuntime->canCreateTicket(
             $sourceTicket->applicant,
             $targetCounter->service,
@@ -858,7 +852,6 @@ class OfficerQueueConsole extends Component
     {
         return ServiceCounter::query()
             ->with('service')
-            ->where('is_active', true)
             ->orderBy('queue_service_id')
             ->orderBy('sort_order')
             ->get();

@@ -1056,7 +1056,7 @@ class QueuePagesTest extends TestCase
             'name' => 'Loket Panggil 2',
             'code' => 'LP-2',
             'sort_order' => 2,
-            'is_active' => true,
+            'is_active' => false,
         ]);
 
         $counterThree = ServiceCounter::create([
@@ -1164,6 +1164,7 @@ class QueuePagesTest extends TestCase
             ->call('openTransferModal', $tickets[1]->id)
             ->assertSet('transferTicketId', $tickets[1]->id)
             ->assertSee('Pindah Loket')
+            ->assertSee('Loket Panggil 2 - tutup')
             ->set('transferTargetCounterId', $counterOne->id)
             ->call('confirmTransferTicket')
             ->assertHasErrors(['transferTargetCounterId'])

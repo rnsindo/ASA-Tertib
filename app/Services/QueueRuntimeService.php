@@ -452,8 +452,8 @@ class QueueRuntimeService
             $counter = null;
 
             if ($forcePreferredCounter) {
-                if (! $preferredCounter || $preferredCounter->queue_service_id !== $service->id || ! $preferredCounter->is_active) {
-                    throw new \RuntimeException('Loket tujuan tidak tersedia, tidak sesuai layanan, atau sedang ditutup.');
+                if (! $preferredCounter || $preferredCounter->queue_service_id !== $service->id) {
+                    throw new \RuntimeException('Loket tujuan tidak tersedia atau tidak sesuai layanan.');
                 }
 
                 $counter = $preferredCounter;

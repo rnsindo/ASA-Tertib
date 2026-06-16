@@ -99,7 +99,7 @@
 - Memperjelas UX quota penuh pada dashboard pendaftar: registrasi tetap tersimpan, layanan penuh tetap tampil, tombol `Ambil Antrian` menampilkan pesan penuh dan tidak membuka scanner QR/kode.
 - Mengubah `Arahkan Pendaftar ke Loket` pada dashboard petugas: tombol `Masukkan` membuka modal pilih layanan dan loket tujuan, lalu memasukkan pendaftar langsung ke loket pilihan panitia.
 - Membuat aksi khusus panitia pada `Arahkan Pendaftar ke Loket` mengabaikan batas kuota harian tanpa mengubah aturan kuota untuk dashboard pendaftar.
-- Memperbaiki aksi `Pindah` pada `Antrian Loket Ini` agar tiket baru selalu dibuat pada loket tujuan yang dipilih di modal, bukan dialihkan lagi oleh rekomendasi alokasi otomatis.
+- Memperbaiki aksi `Pindah` pada `Antrian Loket Ini` agar tiket baru selalu dibuat pada loket tujuan yang dipilih di modal, bukan dialihkan lagi oleh rekomendasi alokasi otomatis. Loket tujuan yang sedang tutup tetap bisa dipilih dan dipaksa menerima pindahan untuk kebutuhan operasional panitia.
 - Mengubah perhitungan target quota loket agar saat quota harian aktif, target per loket dihitung dari quota harian dibagi seluruh loket layanan, termasuk loket yang sedang tutup/nonaktif.
 - Menambahkan permission `petugas.kelola_qr_antrian` untuk melindungi tombol `Buat/Ganti QR & Kode` pada dashboard petugas; permission ini tersedia di seeder tetapi tidak menjadi bawaan role `Petugas`.
 - Mengubah seluruh field select menjadi autocomplete mobile-friendly dengan pencarian dan batas tampilan maksimal 5 opsi.
