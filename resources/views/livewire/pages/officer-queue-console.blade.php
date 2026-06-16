@@ -678,17 +678,18 @@
             @endif
         </section>
 
-        <section class="panel stack section-assign">
-            <div>
-                <h2 class="title" style="font-size: 20px;">Arahkan Pendaftar ke Loket</h2>
-                <p class="subtitle">Data pelanggan/pendaftar hari ini diurutkan dari check-in paling awal. Pendaftar yang sudah antri dipindahkan ke bawah daftar.</p>
-            </div>
+        @if($canDirectApplicants)
+            <section class="panel stack section-assign">
+                <div>
+                    <h2 class="title" style="font-size: 20px;">Arahkan Pendaftar ke Loket</h2>
+                    <p class="subtitle">Data pelanggan/pendaftar hari ini diurutkan dari check-in paling awal. Pendaftar yang sudah antri dipindahkan ke bawah daftar.</p>
+                </div>
 
-            @if(! $selectedCounter->is_active)
-                <div class="alert">Loket yang sedang dipilih ditutup. Pendaftar tetap dapat diarahkan ke layanan lain yang memiliki loket buka.</div>
-            @endif
+                @if(! $selectedCounter->is_active)
+                    <div class="alert">Loket yang sedang dipilih ditutup. Pendaftar tetap dapat diarahkan ke layanan lain yang memiliki loket buka.</div>
+                @endif
 
-            <div class="applicant-directory">
+                <div class="applicant-directory">
                     <div class="quick-search-panel">
                         <div class="quick-search-head">
                             <strong>Pencarian Cepat</strong>
@@ -771,8 +772,9 @@
                             <div class="scroll-status">Semua data sudah ditampilkan.</div>
                         @endif
                     </div>
-            </div>
-        </section>
+                </div>
+            </section>
+        @endif
 
         <section class="panel stack section-noshow">
             <div>

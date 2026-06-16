@@ -21,6 +21,7 @@ class RolePermissionSeeder extends Seeder
         'pengguna.profil' => 'Pengguna - Profil Akun',
         'petugas.beranda' => 'Petugas - Beranda',
         'petugas.konsol_antrian' => 'Petugas - Konsol Antrian',
+        'petugas.arahkan_pendaftar' => 'Petugas - Arahkan Pendaftar ke Loket',
         'petugas.kelola_qr_antrian' => 'Petugas - Kelola QR Antrian',
         'pelanggan.beranda' => 'Pelanggan/Penanya - Beranda',
         'pelanggan.dashboard_antrian' => 'Pelanggan/Penanya - Dashboard Antrian',

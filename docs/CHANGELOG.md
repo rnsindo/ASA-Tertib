@@ -95,6 +95,7 @@
 - Menambahkan pengaturan `QR & Kode Otomatis Berubah` saat batas durasi QR aktif; defaultnya aktif dan dashboard petugas menjadi pemicu regenerasi QR/kode baru ketika masa berlaku sebelumnya habis.
 - Menambahkan toast notifikasi sukses/gagal pada `/pengaturan-aplikasi`; kegagalan validasi atau exception kini menampilkan alasan yang jelas.
 - Menambahkan aturan per layanan `Wajib Panggil Berurutan`; default aktif, dan jika dinonaktifkan petugas dapat memanggil atau memulai tiket menunggu secara acak pada dashboard `/petugas`.
+- Menambahkan permission `petugas.arahkan_pendaftar` untuk melindungi section `Arahkan Pendaftar ke Loket` pada dashboard petugas; permission ini tidak menjadi bawaan role Petugas.
 - Memperjelas UX quota penuh pada dashboard pendaftar: registrasi tetap tersimpan, layanan penuh tetap tampil, tombol `Ambil Antrian` menampilkan pesan penuh dan tidak membuka scanner QR/kode.
 - Mengubah `Arahkan Pendaftar ke Loket` pada dashboard petugas: tombol `Masukkan` membuka modal pilih layanan, lalu sistem otomatis memilih loket buka dengan beban paling ringan.
 - Mengubah perhitungan target quota loket agar saat quota harian aktif, target per loket dihitung dari quota harian dibagi seluruh loket layanan, termasuk loket yang sedang tutup/nonaktif.

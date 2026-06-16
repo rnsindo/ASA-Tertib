@@ -120,6 +120,8 @@ class OfficerQueueConsole extends Component
 
     public function assignToSelectedCounter(int $applicantId): void
     {
+        abort_unless($this->canDirectApplicants(), 403);
+
         $counter = $this->selectedCounter();
         $queueRuntime = app(QueueRuntimeService::class);
 
@@ -151,6 +153,8 @@ class OfficerQueueConsole extends Component
 
     public function openAssignServiceModal(int $applicantId): void
     {
+        abort_unless($this->canDirectApplicants(), 403);
+
         $applicant = Applicant::findOrFail($applicantId);
         $currentSession = app(QueueRuntimeService::class)->currentSession();
 
@@ -183,6 +187,8 @@ class OfficerQueueConsole extends Component
 
     public function confirmAssignApplicantToService(): void
     {
+        abort_unless($this->canDirectApplicants(), 403);
+
         if (! $this->assigningApplicantId) {
             $this->addError('assigningServiceId', 'Pilih pendaftar terlebih dahulu.');
 
@@ -242,6 +248,8 @@ class OfficerQueueConsole extends Component
 
     public function confirmApplicantPresence(int $applicantId): void
     {
+        abort_unless($this->canDirectApplicants(), 403);
+
         $applicant = Applicant::findOrFail($applicantId);
 
         app(QueueRuntimeService::class)->confirmPresenceByOfficer($applicant, auth()->user());
@@ -548,67 +556,77 @@ class OfficerQueueConsole extends Component
             ->get();
 
         $selectedCounter = $this->selectedCounter();
+        $canDirectApplicants = $this->canDirectApplicants();
 
-        $applicantQuery = Applicant::query()
-            ->with('user')
-            ->whereHas('user.roles', fn (Builder $query) => $query->whereIn('name', self::APPLICANT_ROLE_NAMES))
-            ->where(function (Builder $query) use ($currentSession) {
-                $query->whereDate('created_at', $currentSession->session_date)
-                    ->orWhereHas('checkins', fn (Builder $query) => $query->where('queue_session_id', $currentSession->id))
-                    ->orWhereHas('queueTickets', function (Builder $query) use ($currentSession) {
-                        $query->where('queue_session_id', $currentSession->id)
-                            ->orWhereDate('queue_date', $currentSession->session_date);
+        if ($canDirectApplicants) {
+            $applicantQuery = Applicant::query()
+                ->with('user')
+                ->whereHas('user.roles', fn (Builder $query) => $query->whereIn('name', self::APPLICANT_ROLE_NAMES))
+                ->where(function (Builder $query) use ($currentSession) {
+                    $query->whereDate('created_at', $currentSession->session_date)
+                        ->orWhereHas('checkins', fn (Builder $query) => $query->where('queue_session_id', $currentSession->id))
+                        ->orWhereHas('queueTickets', function (Builder $query) use ($currentSession) {
+                            $query->where('queue_session_id', $currentSession->id)
+                                ->orWhereDate('queue_date', $currentSession->session_date);
+                        });
+                })
+                ->when(trim($this->search) !== '', function (Builder $query) {
+                    $term = '%' . trim($this->search) . '%';
+
+                    $query->where(function (Builder $query) use ($term) {
+                        $query->where('full_name', 'like', $term)
+                            ->orWhere('nisn', 'like', $term)
+                            ->orWhere('whatsapp', 'like', $term)
+                            ->orWhere('school_origin', 'like', $term)
+                            ->orWhereHas('user', fn (Builder $query) => $query->where('email', 'like', $term));
                     });
-            })
-            ->when(trim($this->search) !== '', function (Builder $query) {
-                $term = '%' . trim($this->search) . '%';
+                })
+                ->withExists(['queueTickets as has_active_queue_ticket' => function (Builder $query) use ($currentSession) {
+                    $query->whereIn('status', self::ACTIVE_QUEUE_STATUSES)
+                        ->where(function (Builder $query) use ($currentSession) {
+                            $query->where('queue_session_id', $currentSession->id)
+                                ->orWhereDate('queue_date', $currentSession->session_date);
+                        });
+                }])
+                ->withMin(['checkins as today_presence_confirmed_at' => fn (Builder $query) => $query->where('queue_session_id', $currentSession->id)], 'presence_confirmed_at')
+                ->orderBy('has_active_queue_ticket')
+                ->orderByRaw('case when today_presence_confirmed_at is null then 1 else 0 end')
+                ->orderBy('today_presence_confirmed_at')
+                ->orderBy('id');
 
-                $query->where(function (Builder $query) use ($term) {
-                    $query->where('full_name', 'like', $term)
-                        ->orWhere('nisn', 'like', $term)
-                        ->orWhere('whatsapp', 'like', $term)
-                        ->orWhere('school_origin', 'like', $term)
-                        ->orWhereHas('user', fn (Builder $query) => $query->where('email', 'like', $term));
-                });
-            })
-            ->withExists(['queueTickets as has_active_queue_ticket' => function (Builder $query) use ($currentSession) {
-                $query->whereIn('status', self::ACTIVE_QUEUE_STATUSES)
-                    ->where(function (Builder $query) use ($currentSession) {
-                        $query->where('queue_session_id', $currentSession->id)
-                            ->orWhereDate('queue_date', $currentSession->session_date);
-                    });
-            }])
-            ->withMin(['checkins as today_presence_confirmed_at' => fn (Builder $query) => $query->where('queue_session_id', $currentSession->id)], 'presence_confirmed_at')
-            ->orderBy('has_active_queue_ticket')
-            ->orderByRaw('case when today_presence_confirmed_at is null then 1 else 0 end')
-            ->orderBy('today_presence_confirmed_at')
-            ->orderBy('id');
+            $totalApplicants = (clone $applicantQuery)->count();
 
-        $totalApplicants = (clone $applicantQuery)->count();
+            $applicants = $applicantQuery
+                ->limit($this->visibleApplicantCount)
+                ->get();
 
-        $applicants = $applicantQuery
-            ->limit($this->visibleApplicantCount)
-            ->get();
+            $presenceByApplicantId = AttendanceCheckin::query()
+                ->where('queue_session_id', $currentSession->id)
+                ->whereIn('applicant_id', $applicants->pluck('id'))
+                ->get()
+                ->keyBy('applicant_id');
 
-        $presenceByApplicantId = AttendanceCheckin::query()
-            ->where('queue_session_id', $currentSession->id)
-            ->whereIn('applicant_id', $applicants->pluck('id'))
-            ->get()
-            ->keyBy('applicant_id');
-
-        $activeTicketByApplicantId = QueueTicket::query()
-            ->with(['counter.service', 'service'])
-            ->whereIn('applicant_id', $applicants->pluck('id'))
-            ->whereIn('status', self::ACTIVE_QUEUE_STATUSES)
-            ->where(function (Builder $query) use ($currentSession) {
-                $query->where('queue_session_id', $currentSession->id)
-                    ->orWhereDate('queue_date', $currentSession->session_date);
-            })
-            ->orderBy('assigned_at')
-            ->orderBy('id')
-            ->get()
-            ->unique('applicant_id')
-            ->keyBy('applicant_id');
+            $activeTicketByApplicantId = QueueTicket::query()
+                ->with(['counter.service', 'service'])
+                ->whereIn('applicant_id', $applicants->pluck('id'))
+                ->whereIn('status', self::ACTIVE_QUEUE_STATUSES)
+                ->where(function (Builder $query) use ($currentSession) {
+                    $query->where('queue_session_id', $currentSession->id)
+                        ->orWhereDate('queue_date', $currentSession->session_date);
+                })
+                ->orderBy('assigned_at')
+                ->orderBy('id')
+                ->get()
+                ->unique('applicant_id')
+                ->keyBy('applicant_id');
+        } else {
+            $this->assigningApplicantId = null;
+            $this->assigningServiceId = null;
+            $applicants = collect();
+            $totalApplicants = 0;
+            $presenceByApplicantId = collect();
+            $activeTicketByApplicantId = collect();
+        }
 
         $activeQrCode = $queueRuntime->activeCheckInQr(auth()->user());
 
@@ -644,17 +662,19 @@ class OfficerQueueConsole extends Component
                 ->find($this->transferTicketId)
             : null;
 
-        $assigningApplicant = $this->assigningApplicantId
+        $assigningApplicant = $canDirectApplicants && $this->assigningApplicantId
             ? Applicant::query()
                 ->with('user')
                 ->find($this->assigningApplicantId)
             : null;
 
-        $assignmentServices = QueueService::query()
-            ->where('is_active', true)
-            ->orderBy('sort_order')
-            ->orderBy('name')
-            ->get();
+        $assignmentServices = $canDirectApplicants
+            ? QueueService::query()
+                ->where('is_active', true)
+                ->orderBy('sort_order')
+                ->orderBy('name')
+                ->get()
+            : collect();
 
         $assignmentServiceStatuses = $assignmentServices->mapWithKeys(function (QueueService $service) use ($queueRuntime, $currentSession, $assigningApplicant): array {
             $quota = $queueRuntime->quotaStatus($service, $currentSession);
@@ -727,6 +747,7 @@ class OfficerQueueConsole extends Component
             'selectedCounter' => $selectedCounter,
             'isCounterManager' => $this->canManageAllCounters(),
             'canManageQueueQr' => $this->canManageQueueQr(),
+            'canDirectApplicants' => $canDirectApplicants,
             'assignedCountersCount' => $counters->count(),
             'waitingCount' => $activeTickets->where('status', QueueTicket::STATUS_WAITING)->count(),
             'completedCount' => $completedCount,
@@ -778,6 +799,16 @@ class OfficerQueueConsole extends Component
         return (bool) (
             $user
             && ($user->can('petugas.kelola_qr_antrian') || $user->hasAnyRole(['superadmin', 'admin', 'Super Admin']))
+        );
+    }
+
+    private function canDirectApplicants(): bool
+    {
+        $user = auth()->user();
+
+        return (bool) (
+            $user
+            && ($user->can('petugas.arahkan_pendaftar') || $user->hasAnyRole(['superadmin', 'admin', 'Super Admin']))
         );
     }
 

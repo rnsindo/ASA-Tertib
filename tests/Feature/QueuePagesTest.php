@@ -688,11 +688,49 @@ class QueuePagesTest extends TestCase
         $response->assertSee('<title>Konsol Petugas - ASA-Tertib</title>', false);
         $response->assertSee('Dashboard Petugas');
         $response->assertSee('Anda belum ditugaskan ke loket tertentu.');
+        $response->assertDontSee('Arahkan Pendaftar ke Loket');
+    }
+
+    public function test_officer_without_direction_permission_cannot_see_applicant_direction_section(): void
+    {
+        Role::firstOrCreate(['name' => 'officer']);
+
+        $officer = User::factory()->create([
+            'email' => 'no-direction-officer@example.test',
+            'password' => 'password123',
+        ]);
+        $officer->assignRole('officer');
+
+        $service = QueueService::create([
+            'name' => 'Layanan Tanpa Arahkan',
+            'slug' => 'layanan-tanpa-arahkan',
+            'code' => 'LTA',
+            'sort_order' => 1,
+            'is_active' => true,
+        ]);
+
+        ServiceCounter::create([
+            'queue_service_id' => $service->id,
+            'assigned_user_id' => $officer->id,
+            'name' => 'Loket Tanpa Arahkan',
+            'code' => 'LTA-1',
+            'sort_order' => 1,
+            'is_active' => true,
+        ]);
+
+        $response = $this->actingAs($officer)->get('/petugas');
+
+        $response->assertOk();
+        $response->assertSee('Antrian Loket Ini');
+        $response->assertDontSee('Arahkan Pendaftar ke Loket');
+        $response->assertDontSee('Pencarian Cepat');
+        $response->assertDontSee('Masukkan');
     }
 
     public function test_officer_applicant_direction_list_uses_mobile_cards_and_lazy_batches(): void
     {
         Role::firstOrCreate(['name' => 'officer']);
+        Permission::firstOrCreate(['name' => 'petugas.arahkan_pendaftar']);
         $customerRole = Role::firstOrCreate(['name' => 'Pelanggan/Penanya']);
 
         $officer = User::factory()->create([
@@ -700,6 +738,7 @@ class QueuePagesTest extends TestCase
             'password' => 'password123',
         ]);
         $officer->assignRole('officer');
+        $officer->givePermissionTo('petugas.arahkan_pendaftar');
 
         $service = QueueService::create([
             'name' => 'Layanan Mobile List',
@@ -756,6 +795,7 @@ class QueuePagesTest extends TestCase
     public function test_officer_direction_list_filters_customer_roles_and_places_active_queue_after_waiting_applicants(): void
     {
         Role::firstOrCreate(['name' => 'officer']);
+        Permission::firstOrCreate(['name' => 'petugas.arahkan_pendaftar']);
         $customerRole = Role::firstOrCreate(['name' => 'Pelanggan/Penanya']);
 
         $officer = User::factory()->create([
@@ -763,6 +803,7 @@ class QueuePagesTest extends TestCase
             'password' => 'password123',
         ]);
         $officer->assignRole('officer');
+        $officer->givePermissionTo('petugas.arahkan_pendaftar');
 
         $service = QueueService::create([
             'name' => 'Layanan Urutan',
@@ -878,6 +919,7 @@ class QueuePagesTest extends TestCase
     public function test_officer_assigns_applicant_through_service_modal_to_lightest_counter(): void
     {
         Role::firstOrCreate(['name' => 'officer']);
+        Permission::firstOrCreate(['name' => 'petugas.arahkan_pendaftar']);
         $customerRole = Role::firstOrCreate(['name' => 'Pelanggan/Penanya']);
 
         $officer = User::factory()->create([
@@ -885,6 +927,7 @@ class QueuePagesTest extends TestCase
             'password' => 'password123',
         ]);
         $officer->assignRole('officer');
+        $officer->givePermissionTo('petugas.arahkan_pendaftar');
 
         $runtime = app(QueueRuntimeService::class);
         $session = $runtime->currentSession();
@@ -1456,6 +1499,7 @@ class QueuePagesTest extends TestCase
         $this->assertTrue($superAdmin->hasRole('Super Admin'));
         $this->assertTrue($superAdmin->can('petugas.konsol_antrian'));
         $this->assertTrue($superAdmin->can('petugas.kelola_qr_antrian'));
+        $this->assertTrue($superAdmin->can('petugas.arahkan_pendaftar'));
         $this->assertTrue($superAdmin->can('admin.pengaturan_aplikasi'));
         $this->assertTrue($superAdmin->can('admin.manajemen_layanan'));
         $this->assertTrue($superAdmin->can('admin.manajemen_user'));
@@ -1473,6 +1517,7 @@ class QueuePagesTest extends TestCase
         $this->assertDatabaseHas('permissions', ['name' => 'pengguna.profil']);
         $this->assertDatabaseHas('permissions', ['name' => 'petugas.beranda']);
         $this->assertDatabaseHas('permissions', ['name' => 'petugas.konsol_antrian']);
+        $this->assertDatabaseHas('permissions', ['name' => 'petugas.arahkan_pendaftar']);
         $this->assertDatabaseHas('permissions', ['name' => 'petugas.kelola_qr_antrian']);
         $this->assertDatabaseHas('permissions', ['name' => 'pelanggan.beranda']);
         $this->assertDatabaseHas('permissions', ['name' => 'pelanggan.dashboard_antrian']);
@@ -1503,6 +1548,7 @@ class QueuePagesTest extends TestCase
         $this->assertTrue(Role::findByName('Petugas')->hasPermissionTo('petugas.konsol_antrian'));
         $this->assertTrue(Role::findByName('Petugas')->hasPermissionTo('pengguna.profil'));
         $this->assertFalse(Role::findByName('Petugas')->hasPermissionTo('petugas.kelola_qr_antrian'));
+        $this->assertFalse(Role::findByName('Petugas')->hasPermissionTo('petugas.arahkan_pendaftar'));
         $this->assertFalse(Role::findByName('Petugas')->hasPermissionTo('admin.pengaturan_aplikasi'));
         $this->assertFalse(Role::findByName('Petugas')->hasPermissionTo('admin.manajemen_layanan'));
         $this->assertFalse(Role::findByName('Petugas')->hasPermissionTo('admin.manajemen_user'));
@@ -2403,12 +2449,14 @@ class QueuePagesTest extends TestCase
     public function test_service_dependency_can_require_previous_service_completion(): void
     {
         Role::firstOrCreate(['name' => 'officer']);
+        Permission::firstOrCreate(['name' => 'petugas.arahkan_pendaftar']);
 
         $officer = User::factory()->create([
             'email' => 'dependency-officer@example.test',
             'password' => 'password123',
         ]);
         $officer->assignRole('officer');
+        $officer->givePermissionTo('petugas.arahkan_pendaftar');
 
         $applicantUser = User::factory()->create([
             'email' => 'dependency-applicant@example.test',
@@ -2693,12 +2741,14 @@ class QueuePagesTest extends TestCase
     public function test_officer_cannot_queue_applicant_before_presence_confirmation(): void
     {
         Role::firstOrCreate(['name' => 'officer']);
+        Permission::firstOrCreate(['name' => 'petugas.arahkan_pendaftar']);
 
         $officer = User::factory()->create([
             'email' => 'presence-officer@example.test',
             'password' => 'password123',
         ]);
         $officer->assignRole('officer');
+        $officer->givePermissionTo('petugas.arahkan_pendaftar');
 
         $user = User::factory()->create([
             'email' => 'presence-applicant@example.test',
@@ -2760,12 +2810,14 @@ class QueuePagesTest extends TestCase
     public function test_full_quota_blocks_only_that_service(): void
     {
         Role::firstOrCreate(['name' => 'officer']);
+        Permission::firstOrCreate(['name' => 'petugas.arahkan_pendaftar']);
 
         $officer = User::factory()->create([
             'email' => 'quota-officer@example.test',
             'password' => 'password123',
         ]);
         $officer->assignRole('officer');
+        $officer->givePermissionTo('petugas.arahkan_pendaftar');
 
         $runtime = app(QueueRuntimeService::class);
         $session = $runtime->currentSession();
@@ -2968,12 +3020,14 @@ class QueuePagesTest extends TestCase
     public function test_counter_allocation_recommends_under_target_counter(): void
     {
         Role::firstOrCreate(['name' => 'officer']);
+        Permission::firstOrCreate(['name' => 'petugas.arahkan_pendaftar']);
 
         $officer = User::factory()->create([
             'email' => 'allocation-officer@example.test',
             'password' => 'password123',
         ]);
         $officer->assignRole('officer');
+        $officer->givePermissionTo('petugas.arahkan_pendaftar');
 
         $runtime = app(QueueRuntimeService::class);
         $session = $runtime->currentSession();
