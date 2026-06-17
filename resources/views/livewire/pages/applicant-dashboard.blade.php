@@ -555,7 +555,7 @@
             <div class="service-grid">
                 @foreach($services as $service)
                     @php
-                        $ticket = $tickets->first(fn ($candidate) => (int) $candidate->queue_service_id === (int) $service->id && $candidate->status !== \App\Models\QueueTicket::STATUS_CANCELLED);
+                        $ticket = $tickets->first(fn ($candidate) => (int) $candidate->queue_service_id === (int) $service->id && $this->ticketBlocksQueue($candidate));
                         $position = $ticket ? $this->positionFor($ticket) : null;
                         $serviceStatus = $serviceStatuses->get($service->id);
                         $quota = $serviceStatus['quota'] ?? null;

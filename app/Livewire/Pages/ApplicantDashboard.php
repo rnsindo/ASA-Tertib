@@ -80,6 +80,11 @@ class ApplicantDashboard extends Component
         };
     }
 
+    public function ticketBlocksQueue(QueueTicket $ticket): bool
+    {
+        return in_array($ticket->status, self::BLOCKING_QUEUE_STATUSES, true);
+    }
+
     public function estimatedMinutesForTicket(QueueTicket $ticket): int
     {
         $completedTickets = QueueTicket::query()
@@ -399,7 +404,7 @@ class ApplicantDashboard extends Component
             ->unique()
             ->values();
 
-        $ticketServiceIds = $tickets
+        $pastTicketServiceIds = $tickets
             ->reject(fn (QueueTicket $ticket): bool => $ticket->status === QueueTicket::STATUS_CANCELLED)
             ->pluck('queue_service_id')
             ->map(fn ($id): int => (int) $id)
@@ -416,22 +421,22 @@ class ApplicantDashboard extends Component
         $depthCache = [];
 
         return $services
-            ->sortBy(function (QueueService $service) use ($serviceStatuses, $ticketServiceIds, $activeTicketServiceIds, $requiredByBlockedIds, $requiredIdsByService, &$depthCache): string {
+            ->sortBy(function (QueueService $service) use ($serviceStatuses, $pastTicketServiceIds, $activeTicketServiceIds, $requiredByBlockedIds, $requiredIdsByService, &$depthCache): string {
                 $status = $serviceStatuses->get($service->id, []);
-                $hasTicket = $ticketServiceIds->contains((int) $service->id);
+                $hasPastTicket = $pastTicketServiceIds->contains((int) $service->id);
                 $hasActiveTicket = $activeTicketServiceIds->contains((int) $service->id);
                 $dependencyBlocked = filled($status['dependency_error'] ?? null);
                 $activeQueueBlocked = filled($status['active_blocking_ticket'] ?? null);
-                $canTakeQueue = ! $hasTicket && ! $dependencyBlocked && ! ($status['quota']['is_full'] ?? false);
+                $canTakeQueue = ! $hasActiveTicket && ! $dependencyBlocked && ! ($status['quota']['is_full'] ?? false);
                 $isRequiredByBlocked = $requiredByBlockedIds->contains((int) $service->id);
                 $quotaFull = (bool) ($status['quota']['is_full'] ?? false);
 
                 $priority = match (true) {
-                    $canTakeQueue && ! $activeQueueBlocked => 0,
+                    $canTakeQueue && ! $activeQueueBlocked && ! $hasPastTicket => 0,
                     $hasActiveTicket => 1,
                     $isRequiredByBlocked => 2,
                     $dependencyBlocked || $activeQueueBlocked => 3,
-                    $hasTicket => 4,
+                    $canTakeQueue && $hasPastTicket => 4,
                     $quotaFull => 5,
                     default => 6,
                 };

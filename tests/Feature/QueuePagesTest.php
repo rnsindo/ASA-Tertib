@@ -521,6 +521,90 @@ class QueuePagesTest extends TestCase
         ]);
     }
 
+    public function test_applicant_can_take_queue_again_after_final_statuses(): void
+    {
+        Role::firstOrCreate(['name' => 'applicant']);
+
+        $user = User::factory()->create([
+            'email' => 'final-status-repeat-applicant@example.test',
+            'password' => 'password123',
+        ]);
+        $user->assignRole('applicant');
+
+        $applicant = Applicant::create([
+            'user_id' => $user->id,
+            'full_name' => 'Pendaftar Status Akhir',
+            'school_origin' => 'SMP Status Akhir',
+            'nisn' => '9911442200',
+            'whatsapp' => '089911442200',
+            'status' => 'registered',
+        ]);
+
+        $service = QueueService::create([
+            'name' => 'Layanan Ulang Status Akhir',
+            'slug' => 'layanan-ulang-status-akhir',
+            'code' => 'LUSA',
+            'sort_order' => 1,
+            'is_active' => true,
+        ]);
+
+        $counter = ServiceCounter::create([
+            'queue_service_id' => $service->id,
+            'name' => 'Loket Ulang Status Akhir',
+            'code' => 'LUSA-1',
+            'sort_order' => 1,
+            'is_active' => true,
+        ]);
+
+        $session = app(QueueRuntimeService::class)->currentSession();
+
+        foreach ([
+            QueueTicket::STATUS_COMPLETED,
+            QueueTicket::STATUS_CANCELLED,
+            QueueTicket::STATUS_TRANSFERRED,
+        ] as $index => $status) {
+            QueueTicket::create([
+                'applicant_id' => $applicant->id,
+                'queue_session_id' => $session->id,
+                'queue_service_id' => $service->id,
+                'service_counter_id' => $counter->id,
+                'queue_date' => $session->session_date,
+                'queue_number' => $index + 1,
+                'call_sequence' => ($index + 1) * 1000,
+                'ticket_code' => 'LUSA-' . str_pad((string) ($index + 1), 3, '0', STR_PAD_LEFT),
+                'status' => $status,
+                'assigned_at' => now()->subMinutes(30 - $index),
+                'completed_at' => $status === QueueTicket::STATUS_COMPLETED ? now()->subMinutes(20) : null,
+                'cancelled_at' => $status === QueueTicket::STATUS_CANCELLED ? now()->subMinutes(15) : null,
+            ]);
+        }
+
+        $this->actingAs($user)
+            ->get('/dashboard')
+            ->assertOk()
+            ->assertSee('Layanan Ulang Status Akhir')
+            ->assertSee('Belum Mengantri')
+            ->assertSee('Ambil Antrian');
+
+        $qr = app(QueueRuntimeService::class)->createCheckInQr();
+
+        Livewire::actingAs($user)
+            ->test(ApplicantDashboard::class)
+            ->call('openQueueScanner', $service->id)
+            ->assertSet('selectedServiceId', $service->id)
+            ->set('queue_code', $qr['manualCode'])
+            ->call('claimSelectedService')
+            ->assertRedirect(route('dashboard'));
+
+        $this->assertDatabaseHas('queue_tickets', [
+            'applicant_id' => $applicant->id,
+            'queue_service_id' => $service->id,
+            'queue_number' => 4,
+            'ticket_code' => 'LUSA-004',
+            'status' => QueueTicket::STATUS_WAITING,
+        ]);
+    }
+
     public function test_previous_day_active_ticket_does_not_lock_today_applicant_dashboard(): void
     {
         Role::firstOrCreate(['name' => 'applicant']);
