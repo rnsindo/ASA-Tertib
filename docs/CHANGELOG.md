@@ -101,6 +101,8 @@
 - Membuat aksi khusus panitia pada `Arahkan Pendaftar ke Loket` mengabaikan batas kuota harian tanpa mengubah aturan kuota untuk dashboard pendaftar.
 - Memperbaiki aksi `Pindah` pada `Antrian Loket Ini` agar tiket baru selalu dibuat pada loket tujuan yang dipilih di modal, bukan dialihkan lagi oleh rekomendasi alokasi otomatis. Loket tujuan yang sedang tutup tetap bisa dipilih dan dipaksa menerima pindahan untuk kebutuhan operasional panitia.
 - Memperbaiki validasi paksa loket pada MySQL production agar `queue_service_id` string dan `service.id` integer tetap dianggap layanan yang sama, sehingga transfer tidak lagi memunculkan 500 `Loket tujuan tidak tersedia atau tidak sesuai layanan`.
+- Menambahkan section `Riwayat Antrian Loket Ini` di bagian bawah dashboard petugas untuk tiket selesai/dibatalkan, lengkap dengan tombol `Masukkan Kembali` yang membuka modal pilih loket tujuan dan membuat tiket baru pada loket tersebut.
+- Menghapus blokir status layanan/loket tutup pada aksi khusus panitia `Masukkan` dan mengabaikan status layanan harian tutup pada aksi `Pindah`; validasi kehadiran dan antrian aktif tetap berjalan.
 - Mengubah perhitungan target quota loket agar saat quota harian aktif, target per loket dihitung dari quota harian dibagi seluruh loket layanan, termasuk loket yang sedang tutup/nonaktif.
 - Menambahkan permission `petugas.kelola_qr_antrian` untuk melindungi tombol `Buat/Ganti QR & Kode` pada dashboard petugas; permission ini tersedia di seeder tetapi tidak menjadi bawaan role `Petugas`.
 - Mengubah seluruh field select menjadi autocomplete mobile-friendly dengan pencarian dan batas tampilan maksimal 5 opsi.

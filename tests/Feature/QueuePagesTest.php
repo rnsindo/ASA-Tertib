@@ -937,7 +937,7 @@ class QueuePagesTest extends TestCase
             'slug' => 'layanan-modal',
             'code' => 'LM',
             'sort_order' => 1,
-            'is_active' => true,
+            'is_active' => false,
         ]);
 
         $busyCounter = ServiceCounter::create([
@@ -946,7 +946,7 @@ class QueuePagesTest extends TestCase
             'name' => 'Loket Modal Ramai',
             'code' => 'LM-1',
             'sort_order' => 1,
-            'is_active' => true,
+            'is_active' => false,
         ]);
 
         $lightCounter = ServiceCounter::create([
@@ -1005,11 +1005,11 @@ class QueuePagesTest extends TestCase
             ->call('openAssignServiceModal', $applicant->id)
             ->assertSet('assigningApplicantId', $applicant->id)
             ->assertSee('Masukkan ke Layanan')
-            ->assertSee('Layanan Modal - Kuota 1 / 2')
+            ->assertSee('Layanan Modal - nonaktif - Kuota 1 / 2')
             ->assertDontSee('rekomendasi')
             ->set('assigningServiceId', $service->id)
             ->assertSee('Pilih loket tujuan')
-            ->assertSee('Layanan Modal - Loket Modal Ramai')
+            ->assertSee('Layanan Modal - Loket Modal Ramai - tutup')
             ->assertSee('Layanan Modal - Loket Modal Ringan')
             ->set('assigningCounterId', $busyCounter->id)
             ->call('confirmAssignApplicantToService')
@@ -1073,7 +1073,7 @@ class QueuePagesTest extends TestCase
             'queue_session_id' => $session->id,
             'queue_service_id' => $service->id,
             'max_daily_quota' => 6,
-            'is_open' => true,
+            'is_open' => false,
         ]);
 
         $tickets = collect(range(1, 2))->map(function (int $number) use ($service, $counterOne, $session): QueueTicket {
@@ -1241,6 +1241,103 @@ class QueuePagesTest extends TestCase
             'queue_service_id' => $service->id,
             'service_counter_id' => $counter->id,
         ]);
+    }
+
+    public function test_officer_can_requeue_completed_or_cancelled_history_ticket_to_selected_counter(): void
+    {
+        Role::firstOrCreate(['name' => 'officer']);
+
+        $officer = User::factory()->create([
+            'email' => 'history-requeue-officer@example.test',
+            'password' => 'password123',
+        ]);
+        $officer->assignRole('officer');
+
+        $service = QueueService::create([
+            'name' => 'Layanan Riwayat',
+            'slug' => 'layanan-riwayat',
+            'code' => 'LR',
+            'sort_order' => 1,
+            'is_active' => true,
+        ]);
+
+        $sourceCounter = ServiceCounter::create([
+            'queue_service_id' => $service->id,
+            'assigned_user_id' => $officer->id,
+            'name' => 'Loket Riwayat Asal',
+            'code' => 'LR-1',
+            'sort_order' => 1,
+            'is_active' => true,
+        ]);
+
+        $targetCounter = ServiceCounter::create([
+            'queue_service_id' => $service->id,
+            'name' => 'Loket Riwayat Tujuan',
+            'code' => 'LR-2',
+            'sort_order' => 2,
+            'is_active' => false,
+        ]);
+
+        $session = app(QueueRuntimeService::class)->currentSession();
+
+        $user = User::factory()->create(['email' => 'history-requeue-applicant@example.test']);
+        $applicant = Applicant::create([
+            'user_id' => $user->id,
+            'full_name' => 'Pendaftar Riwayat',
+            'school_origin' => 'SMP Riwayat',
+            'nisn' => '8800770011',
+            'whatsapp' => '08800770011',
+            'status' => 'registered',
+        ]);
+
+        AttendanceCheckin::create([
+            'queue_session_id' => $session->id,
+            'applicant_id' => $applicant->id,
+            'presence_status' => AttendanceCheckin::STATUS_CHECKED_IN,
+            'presence_confirmed_at' => today()->setTime(8, 30),
+            'presence_method' => AttendanceCheckin::METHOD_OFFICER,
+            'presence_location_code' => today()->toDateString(),
+        ]);
+
+        $completedTicket = QueueTicket::create([
+            'applicant_id' => $applicant->id,
+            'queue_session_id' => $session->id,
+            'queue_service_id' => $service->id,
+            'service_counter_id' => $sourceCounter->id,
+            'queue_date' => $session->session_date,
+            'queue_number' => 1,
+            'call_sequence' => 1000,
+            'ticket_code' => 'LR-001',
+            'status' => QueueTicket::STATUS_COMPLETED,
+            'assigned_at' => now()->subHour(),
+            'started_at' => now()->subMinutes(50),
+            'completed_at' => now()->subMinutes(40),
+        ]);
+
+        Livewire::actingAs($officer)
+            ->test(OfficerQueueConsole::class)
+            ->assertSee('Riwayat Antrian Loket Ini')
+            ->assertSee('Pendaftar Riwayat')
+            ->assertSee('Selesai')
+            ->call('openHistoryRequeueModal', $completedTicket->id)
+            ->assertSet('historyRequeueTicketId', $completedTicket->id)
+            ->assertSee('Masukkan Kembali')
+            ->assertSee('Loket Riwayat Tujuan - tutup')
+            ->set('historyRequeueCounterId', $targetCounter->id)
+            ->call('confirmHistoryRequeueTicket')
+            ->assertHasNoErrors()
+            ->assertSet('historyRequeueTicketId', null);
+
+        $this->assertDatabaseHas('queue_tickets', [
+            'applicant_id' => $applicant->id,
+            'queue_service_id' => $service->id,
+            'service_counter_id' => $targetCounter->id,
+            'transferred_from_counter_id' => $sourceCounter->id,
+            'status' => QueueTicket::STATUS_WAITING,
+        ]);
+
+        $this->assertSame(QueueTicket::STATUS_COMPLETED, $completedTicket->refresh()->status);
+        $this->assertStringContainsString('Dimasukkan kembali ke Loket Riwayat Tujuan', $completedTicket->notes);
     }
 
     public function test_officer_can_call_and_start_random_waiting_ticket_when_service_allows_random_order(): void

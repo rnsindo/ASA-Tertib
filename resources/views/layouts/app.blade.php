@@ -806,7 +806,8 @@
                     </button>
                 </div>
                 <div class="greeting">
-                    <span>Welcome, {{ $displayName }}</span>
+                    <span>Welcome, </span><br>
+                    <strong>{{ $displayName }}</strong><br>
                     <strong>Status Antrian Hari Ini</strong>
                     <div
                         id="headerLiveClock"

@@ -382,9 +382,10 @@
         .section-active { background: linear-gradient(180deg, #ffffff 0%, #eff6ff 100%); border-color: #93c5fd; }
         .section-assign { background: linear-gradient(180deg, #ffffff 0%, #f0fdf4 100%); border-color: #bbf7d0; }
         .section-noshow { background: linear-gradient(180deg, #ffffff 0%, #fff7ed 100%); border-color: #fed7aa; }
+        .section-history { background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%); border-color: #cbd5e1; }
         .section-counters { background: linear-gradient(180deg, #ffffff 0%, #f5f3ff 100%); border-color: #ddd6fe; }
-        .no-show-list, .counter-summary-list { display: grid; gap: 10px; }
-        .no-show-card, .counter-summary-card {
+        .no-show-list, .history-list, .counter-summary-list { display: grid; gap: 10px; }
+        .no-show-card, .history-card, .counter-summary-card {
             display: grid;
             gap: 10px;
             border: 1px solid var(--line);
@@ -394,6 +395,7 @@
             box-shadow: 0 10px 24px rgba(15, 23, 42, .06);
         }
         .no-show-card { border-color: #fed7aa; }
+        .history-card { border-color: #cbd5e1; }
         .counter-summary-card { border-color: #ddd6fe; }
         .summary-head {
             display: grid;
@@ -827,6 +829,58 @@
             @endif
         </section>
 
+        <section class="panel stack section-history">
+            <div>
+                <h2 class="title" style="font-size: 20px;">Riwayat Antrian Loket Ini</h2>
+                <p class="subtitle">Data antrian hari ini yang sudah selesai atau dibatalkan pada loket yang sedang dipilih.</p>
+            </div>
+
+            @if($historyTickets->isEmpty())
+                <div class="empty">Belum ada riwayat selesai atau dibatalkan pada loket ini.</div>
+            @else
+                <div class="history-list">
+                    @foreach($historyTickets as $ticket)
+                        <article class="history-card" wire:key="history-ticket-card-{{ $ticket->id }}">
+                            <div class="summary-head">
+                                <div>
+                                    <strong>{{ $ticket->applicant?->full_name ?: 'Pendaftar tidak ditemukan' }}</strong>
+                                    <span>{{ $ticket->ticket_code }} - {{ $ticket->service?->name ?: '-' }}</span>
+                                </div>
+                                @if($ticket->status === \App\Models\QueueTicket::STATUS_COMPLETED)
+                                    <span class="badge" style="background: #dcfce7; color: #166534;">Selesai</span>
+                                @else
+                                    <span class="badge" style="background: #fee2e2; color: #991b1b;">Dibatalkan</span>
+                                @endif
+                            </div>
+
+                            <div class="ticket-meta">
+                                <span><b>NISN</b>{{ $ticket->applicant?->nisn ?: '-' }}</span>
+                                <span><b>Sekolah</b>{{ $ticket->applicant?->school_origin ?: '-' }}</span>
+                                <span><b>Loket</b>{{ $ticket->counter?->name ?: '-' }}</span>
+                                <span>
+                                    <b>Waktu</b>
+                                    @if($ticket->status === \App\Models\QueueTicket::STATUS_COMPLETED)
+                                        {{ $ticket->completed_at ? \App\Support\AppClock::format($ticket->completed_at, 'H:i') : '-' }}
+                                    @else
+                                        {{ $ticket->cancelled_at ? \App\Support\AppClock::format($ticket->cancelled_at, 'H:i') : '-' }}
+                                    @endif
+                                </span>
+                            </div>
+
+                            @if($ticket->notes)
+                                <div class="scroll-status" style="text-align: left;">{{ $ticket->notes }}</div>
+                            @endif
+
+                            <button type="button" class="btn btn-primary btn-small" wire:click="openHistoryRequeueModal({{ $ticket->id }})">
+                                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M21 3v5h-5"/><path d="M12 7v10"/><path d="M7 12h10"/></svg>
+                                Masukkan Kembali
+                            </button>
+                        </article>
+                    @endforeach
+                </div>
+            @endif
+        </section>
+
         @if($assigningApplicant)
             <div class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="assignServiceTitle" wire:key="assign-service-modal-{{ $assigningApplicant->id }}">
                 <div class="transfer-modal">
@@ -851,7 +905,7 @@
                                 @php($status = $assignmentServiceStatuses->get($service->id))
                                 @php($quota = $status['quota'] ?? null)
                                 <option value="{{ $service->id }}" @disabled(! ($status['can_queue'] ?? false))>
-                                    {{ $service->name }}{{ ($quota['is_enabled'] ?? false) ? ' - Kuota ' . ($quota['label'] ?? 'Tanpa batas') : '' }}{{ ! ($status['can_queue'] ?? false) ? ' - ' . ($status['unavailable_message'] ?? 'Tidak tersedia') : '' }}
+                                    {{ $service->name }}{{ ! $service->is_active ? ' - nonaktif' : '' }}{{ ($quota['is_enabled'] ?? false) ? ' - Kuota ' . ($quota['label'] ?? 'Tanpa batas') : '' }}{{ ! ($status['can_queue'] ?? false) ? ' - ' . ($status['unavailable_message'] ?? 'Tidak tersedia') : '' }}
                                 </option>
                             @endforeach
                         </select>
@@ -882,7 +936,7 @@
                             <option value="">Pilih loket tujuan</option>
                             @foreach($assignmentCounters as $counter)
                                 <option value="{{ $counter->id }}">
-                                    {{ $counter->service?->name }} - {{ $counter->name }}
+                                    {{ $counter->service?->name }} - {{ $counter->name }}{{ ! $counter->is_active ? ' - tutup' : '' }}
                                 </option>
                             @endforeach
                         </select>
@@ -902,6 +956,61 @@
                         <button type="button" class="btn btn-primary" wire:click="confirmAssignApplicantToService">
                             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
                             Masukkan
+                        </button>
+                    </div>
+                </div>
+            </div>
+        @endif
+
+        @if($historyRequeueTicket)
+            <div class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="historyRequeueTitle" wire:key="history-requeue-modal-{{ $historyRequeueTicket->id }}">
+                <div class="transfer-modal">
+                    <div class="transfer-modal-head">
+                        <div>
+                            <strong id="historyRequeueTitle">Masukkan Kembali</strong>
+                            <div class="muted">
+                                {{ $historyRequeueTicket->ticket_code }} - {{ $historyRequeueTicket->applicant?->full_name ?: 'Pendaftar tidak ditemukan' }}
+                            </div>
+                        </div>
+                        <button type="button" class="btn btn-outline btn-small" wire:click="closeHistoryRequeueModal">
+                            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18"/><path d="M6 6l12 12"/></svg>
+                            Tutup
+                        </button>
+                    </div>
+
+                    <div class="applicant-meta">
+                        <span><b>Status Riwayat</b>{{ $historyRequeueTicket->status_label }}</span>
+                        <span><b>Layanan Asal</b>{{ $historyRequeueTicket->service?->name ?: '-' }}</span>
+                        <span><b>Loket Asal</b>{{ $historyRequeueTicket->counter?->name ?: '-' }} ({{ $historyRequeueTicket->counter?->code ?: '-' }})</span>
+                        <span><b>NISN</b>{{ $historyRequeueTicket->applicant?->nisn ?: '-' }}</span>
+                    </div>
+
+                    <div class="field">
+                        <label for="historyRequeueCounterId">Pilih Loket Tujuan</label>
+                        <select id="historyRequeueCounterId" class="select" wire:model="historyRequeueCounterId" data-autocomplete-select data-autocomplete-placeholder="Cari loket tujuan">
+                            <option value="">Pilih loket tujuan</option>
+                            @foreach($transferCounters as $counter)
+                                <option value="{{ $counter->id }}">
+                                    {{ $counter->service?->name }} - {{ $counter->name }}{{ ! $counter->is_active ? ' - tutup' : '' }}
+                                </option>
+                            @endforeach
+                        </select>
+                        @error('historyRequeueCounterId') <span class="error">{{ $message }}</span> @enderror
+                    </div>
+
+                    <div class="field">
+                        <label for="historyRequeueNotes">Catatan</label>
+                        <input id="historyRequeueNotes" class="input" type="text" wire:model="notes" placeholder="Opsional">
+                    </div>
+
+                    <div class="button-row" style="justify-content: flex-end;">
+                        <button type="button" class="btn btn-outline" wire:click="closeHistoryRequeueModal">
+                            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18"/><path d="M6 6l12 12"/></svg>
+                            Batal
+                        </button>
+                        <button type="button" class="btn btn-primary" wire:click="confirmHistoryRequeueTicket">
+                            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
+                            Masukkan Kembali
                         </button>
                     </div>
                 </div>

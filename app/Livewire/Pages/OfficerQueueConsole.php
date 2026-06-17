@@ -35,6 +35,8 @@ class OfficerQueueConsole extends Component
     public ?int $assigningApplicantId = null;
     public ?int $assigningServiceId = null;
     public ?int $assigningCounterId = null;
+    public ?int $historyRequeueTicketId = null;
+    public ?int $historyRequeueCounterId = null;
     public string $search = '';
     public string $noShowSearch = '';
     public int $visibleApplicantCount = self::APPLICANT_BATCH_SIZE;
@@ -75,6 +77,8 @@ class OfficerQueueConsole extends Component
         $this->assigningApplicantId = null;
         $this->assigningServiceId = null;
         $this->assigningCounterId = null;
+        $this->historyRequeueTicketId = null;
+        $this->historyRequeueCounterId = null;
     }
 
     public function updatedSearch(): void
@@ -102,6 +106,11 @@ class OfficerQueueConsole extends Component
     public function updatedAssigningCounterId(): void
     {
         $this->resetErrorBag('assigningCounterId');
+    }
+
+    public function updatedHistoryRequeueCounterId(): void
+    {
+        $this->resetErrorBag('historyRequeueCounterId');
     }
 
     public function loadMoreApplicants(): void
@@ -224,22 +233,20 @@ class OfficerQueueConsole extends Component
         $currentSession = $queueRuntime->currentSession();
         $applicant = Applicant::findOrFail($this->assigningApplicantId);
         $service = QueueService::query()
-            ->where('is_active', true)
             ->find($this->assigningServiceId);
 
         if (! $service) {
-            $this->addError('assigningServiceId', 'Layanan tidak tersedia atau sedang dinonaktifkan.');
+            $this->addError('assigningServiceId', 'Layanan tidak tersedia.');
 
             return;
         }
 
         $counter = ServiceCounter::query()
             ->where('queue_service_id', $service->id)
-            ->where('is_active', true)
             ->find($this->assigningCounterId);
 
         if (! $counter) {
-            $this->addError('assigningCounterId', 'Loket tujuan tidak tersedia, tidak sesuai layanan, atau sedang ditutup.');
+            $this->addError('assigningCounterId', 'Loket tujuan tidak tersedia atau tidak sesuai layanan.');
 
             return;
         }
@@ -429,6 +436,97 @@ class OfficerQueueConsole extends Component
         $this->transferTargetCounterId = null;
     }
 
+    public function openHistoryRequeueModal(int $ticketId): void
+    {
+        $ticket = QueueTicket::findOrFail($ticketId);
+        $this->authorizeTicketCounter($ticket);
+
+        if (! in_array($ticket->status, [QueueTicket::STATUS_COMPLETED, QueueTicket::STATUS_CANCELLED], true)) {
+            $this->addError('notes', 'Hanya tiket selesai atau dibatalkan yang bisa dimasukkan kembali dari riwayat.');
+
+            return;
+        }
+
+        $this->historyRequeueTicketId = $ticket->id;
+        $this->historyRequeueCounterId = null;
+        $this->resetErrorBag('historyRequeueCounterId');
+    }
+
+    public function closeHistoryRequeueModal(): void
+    {
+        $this->historyRequeueTicketId = null;
+        $this->historyRequeueCounterId = null;
+        $this->resetErrorBag('historyRequeueCounterId');
+    }
+
+    public function confirmHistoryRequeueTicket(): void
+    {
+        if (! $this->historyRequeueTicketId) {
+            $this->addError('historyRequeueCounterId', 'Pilih riwayat antrian yang akan dimasukkan kembali.');
+
+            return;
+        }
+
+        $targetCounter = ServiceCounter::with('service')->find($this->historyRequeueCounterId);
+
+        if (! $targetCounter) {
+            $this->addError('historyRequeueCounterId', 'Pilih loket tujuan.');
+
+            return;
+        }
+
+        $queueRuntime = app(QueueRuntimeService::class);
+        $historyTicket = QueueTicket::with(['applicant', 'service', 'counter'])->findOrFail($this->historyRequeueTicketId);
+        $this->authorizeTicketCounter($historyTicket);
+
+        if (! in_array($historyTicket->status, [QueueTicket::STATUS_COMPLETED, QueueTicket::STATUS_CANCELLED], true)) {
+            $this->addError('historyRequeueCounterId', 'Hanya tiket selesai atau dibatalkan yang bisa dimasukkan kembali dari riwayat.');
+
+            return;
+        }
+
+        [$canCreate, $message] = $queueRuntime->canCreateTicket(
+            $historyTicket->applicant,
+            $targetCounter->service,
+            null,
+            null,
+            true,
+        );
+
+        if (! $canCreate) {
+            $this->addError('historyRequeueCounterId', $message);
+
+            return;
+        }
+
+        try {
+            $newTicket = $queueRuntime->createTicket(
+                $historyTicket->applicant,
+                $targetCounter->service,
+                $targetCounter,
+                auth()->user(),
+                $historyTicket->service_counter_id,
+                trim(($this->notes ? $this->notes . "\n" : '') . 'Masuk kembali dari riwayat ' . $historyTicket->ticket_code),
+                null,
+                forcePreferredCounter: true,
+            );
+
+            $historyTicket->update([
+                'handled_by' => auth()->id(),
+                'notes' => $this->appendTicketNote($historyTicket, 'Dimasukkan kembali ke ' . $targetCounter->name . ' dengan nomor ' . $newTicket->ticket_code . ' pada ' . now()->format('H:i') . '.'),
+            ]);
+        } catch (\Throwable $exception) {
+            $this->addError('historyRequeueCounterId', $exception->getMessage() ?: 'Gagal memasukkan kembali tiket dari riwayat.');
+
+            return;
+        }
+
+        session()->flash('status', 'Riwayat ' . $historyTicket->ticket_code . ' dimasukkan kembali ke ' . $targetCounter->name . ' dengan nomor ' . $newTicket->ticket_code . '.');
+
+        $this->notes = '';
+        $this->closeHistoryRequeueModal();
+    }
+
     public function confirmTransferTicket(): void
     {
         if (! $this->transferTicketId) {
@@ -465,6 +563,7 @@ class OfficerQueueConsole extends Component
             $targetCounter->service,
             null,
             $sourceTicket->id,
+            true,
         );
 
         if (! $canCreate) {
@@ -692,6 +791,12 @@ class OfficerQueueConsole extends Component
                 ->find($this->transferTicketId)
             : null;
 
+        $historyRequeueTicket = $this->historyRequeueTicketId
+            ? QueueTicket::query()
+                ->with(['applicant', 'service', 'counter.service'])
+                ->find($this->historyRequeueTicketId)
+            : null;
+
         $assigningApplicant = $canDirectApplicants && $this->assigningApplicantId
             ? Applicant::query()
                 ->with('user')
@@ -700,7 +805,6 @@ class OfficerQueueConsole extends Component
 
         $assignmentServices = $canDirectApplicants
             ? QueueService::query()
-                ->where('is_active', true)
                 ->orderBy('sort_order')
                 ->orderBy('name')
                 ->get()
@@ -710,7 +814,6 @@ class OfficerQueueConsole extends Component
             ? ServiceCounter::query()
                 ->with('service')
                 ->where('queue_service_id', $this->assigningServiceId)
-                ->where('is_active', true)
                 ->orderBy('sort_order')
                 ->orderBy('name')
                 ->get()
@@ -719,23 +822,22 @@ class OfficerQueueConsole extends Component
         $assignmentServiceStatuses = $assignmentServices->mapWithKeys(function (QueueService $service) use ($queueRuntime, $currentSession, $assigningApplicant): array {
             $quota = $queueRuntime->quotaStatus($service, $currentSession);
             $dependencyError = $assigningApplicant ? $queueRuntime->dependencyError($assigningApplicant, $service, $currentSession) : null;
-            $hasActiveCounter = ServiceCounter::query()
+            $hasCounter = ServiceCounter::query()
                 ->where('queue_service_id', $service->id)
-                ->where('is_active', true)
                 ->exists();
             $unavailableMessage = null;
 
             if ($dependencyError) {
                 $unavailableMessage = $dependencyError;
-            } elseif (! $hasActiveCounter) {
-                $unavailableMessage = 'Belum ada loket yang buka.';
+            } elseif (! $hasCounter) {
+                $unavailableMessage = 'Belum ada loket untuk layanan ini.';
             }
 
             return [
                 $service->id => [
                     'quota' => $quota,
                     'dependency_error' => $dependencyError,
-                    'has_active_counter' => $hasActiveCounter,
+                    'has_counter' => $hasCounter,
                     'can_queue' => $unavailableMessage === null,
                     'unavailable_message' => $unavailableMessage,
                 ],
@@ -781,6 +883,15 @@ class OfficerQueueConsole extends Component
             ->where('status', QueueTicket::STATUS_COMPLETED)
             ->count();
 
+        $historyTickets = QueueTicket::query()
+            ->with(['applicant.user', 'service', 'counter'])
+            ->when($selectedCounter, fn (Builder $query) => $query->where('service_counter_id', $selectedCounter->id), fn (Builder $query) => $query->whereRaw('1 = 0'))
+            ->whereDate('queue_date', today())
+            ->whereIn('status', [QueueTicket::STATUS_COMPLETED, QueueTicket::STATUS_CANCELLED])
+            ->orderByRaw("case when completed_at is not null then completed_at when cancelled_at is not null then cancelled_at else updated_at end desc")
+            ->orderByDesc('id')
+            ->get();
+
         return view('livewire.pages.officer-queue-console', [
             'currentSession' => $currentSession,
             'counters' => $counters,
@@ -805,11 +916,13 @@ class OfficerQueueConsole extends Component
             'activeTickets' => $activeTickets,
             'firstWaitingTicketId' => $firstWaitingTicketId,
             'transferTicket' => $transferTicket,
+            'historyRequeueTicket' => $historyRequeueTicket,
             'assigningApplicant' => $assigningApplicant,
             'assignmentServices' => $assignmentServices,
             'assignmentCounters' => $assignmentCounters,
             'assignmentServiceStatuses' => $assignmentServiceStatuses,
             'noShowTickets' => $noShowTickets,
+            'historyTickets' => $historyTickets,
         ]);
     }
 
