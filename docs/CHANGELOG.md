@@ -104,6 +104,7 @@
 - Menambahkan section `Riwayat Antrian Loket Ini` di bagian bawah dashboard petugas untuk tiket selesai/dibatalkan, lengkap dengan tombol `Masukkan Kembali` yang membuka modal pilih loket tujuan dan membuat tiket baru pada loket tersebut.
 - Menghapus blokir status layanan/loket tutup pada aksi khusus panitia `Masukkan` dan mengabaikan status layanan harian tutup pada aksi `Pindah`; validasi kehadiran dan antrian aktif tetap berjalan.
 - Memperbaiki dashboard pendaftar agar tiket dengan status akhir seperti `Selesai`, `Dibatalkan`, dan `Dipindahkan` tidak lagi mengunci tombol `Ambil Antrian`; pendaftar dapat mengambil nomor ulang selama tidak memiliki antrian aktif/terlewat.
+- Mengubah pemilihan loket pada dashboard petugas dari daftar tombol panjang menjadi select autocomplete, sehingga Super Admin bisa berpindah antar loket tanpa scroll daftar loket yang panjang.
 - Mengubah perhitungan target quota loket agar saat quota harian aktif, target per loket dihitung dari quota harian dibagi seluruh loket layanan, termasuk loket yang sedang tutup/nonaktif.
 - Menambahkan permission `petugas.kelola_qr_antrian` untuk melindungi tombol `Buat/Ganti QR & Kode` pada dashboard petugas; permission ini tersedia di seeder tetapi tidak menjadi bawaan role `Petugas`.
 - Mengubah seluruh field select menjadi autocomplete mobile-friendly dengan pencarian dan batas tampilan maksimal 5 opsi.

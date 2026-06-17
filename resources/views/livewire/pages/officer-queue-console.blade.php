@@ -23,24 +23,25 @@
         .officer-avatar img { width: 100%; height: 100%; object-fit: cover; }
         .officer-profile strong { display: block; color: var(--primary-deep); font-size: 18px; line-height: 1.2; }
         .officer-profile span { display: block; margin-top: 3px; color: var(--muted); font-size: 12px; word-break: break-word; }
-        .counter-tabs { display: grid; gap: 8px; }
-        .counter-tab {
-            width: 100%;
+        .counter-selector {
             display: grid;
-            grid-template-columns: 1fr auto;
             gap: 10px;
-            align-items: center;
-            text-align: left;
             border: 1px solid var(--line);
             border-radius: 8px;
             padding: 12px;
             background: #fff;
-            color: var(--ink);
-            cursor: pointer;
         }
-        .counter-tab.is-selected { border-color: var(--primary); background: var(--primary-soft); }
-        .counter-tab strong { display: block; color: var(--primary-deep); font-size: 14px; }
-        .counter-tab span span { display: block; margin-top: 2px; color: var(--muted); font-size: 12px; }
+        .counter-selected-summary {
+            display: grid;
+            grid-template-columns: 1fr auto;
+            gap: 10px;
+            align-items: center;
+            border-radius: 8px;
+            padding: 10px;
+            background: var(--primary-soft);
+        }
+        .counter-selected-summary strong { display: block; color: var(--primary-deep); font-size: 14px; }
+        .counter-selected-summary span span { display: block; margin-top: 2px; color: var(--muted); font-size: 12px; }
         .counter-state {
             display: inline-flex;
             align-items: center;
@@ -455,7 +456,7 @@
         @media (max-width: 720px) {
             .officer-profile { grid-template-columns: 44px 1fr; }
             .officer-avatar { width: 44px; height: 44px; }
-            .counter-control-head { display: grid; }
+            .counter-control-head, .counter-selected-summary { display: grid; }
             .quick-search-head { display: grid; }
             .quick-search-head span { text-align: left; }
             .applicant-meta { grid-template-columns: 1fr; }
@@ -486,16 +487,27 @@
         </div>
 
         @if($counters->isNotEmpty())
-            <div class="counter-tabs" aria-label="Daftar loket tugas">
-                @foreach($counters as $counter)
-                    <button type="button" class="counter-tab {{ $selectedCounter?->id === $counter->id ? 'is-selected' : '' }}" wire:click="selectCounter({{ $counter->id }})">
+            <div class="counter-selector" aria-label="Pilih loket tugas">
+                <div class="field">
+                    <label for="selectedCounterId">Pilih Loket</label>
+                    <select id="selectedCounterId" class="select" wire:change="selectCounter($event.target.value)" data-autocomplete-select data-autocomplete-placeholder="Cari loket">
+                        @foreach($counters as $counter)
+                            <option value="{{ $counter->id }}" @selected((int) $selectedCounter?->id === (int) $counter->id)>
+                                {{ $counter->service->name }} - {{ $counter->name }} ({{ $counter->code }}){{ $counter->assignedOfficer ? ' - ' . $counter->assignedOfficer->name : '' }} - {{ $counter->is_active ? 'Buka' : 'Tutup' }}
+                            </option>
+                        @endforeach
+                    </select>
+                </div>
+
+                @if($selectedCounter)
+                    <div class="counter-selected-summary">
                         <span>
-                            <strong>{{ $counter->name }} - {{ $counter->code }}</strong>
-                            <span>{{ $counter->service->name }}{{ $counter->assignedOfficer ? ' - ' . $counter->assignedOfficer->name : '' }}</span>
+                            <strong>{{ $selectedCounter->name }} - {{ $selectedCounter->code }}</strong>
+                            <span>{{ $selectedCounter->service->name }}{{ $selectedCounter->assignedOfficer ? ' - ' . $selectedCounter->assignedOfficer->name : '' }}</span>
                         </span>
-                        <span class="counter-state {{ $counter->is_active ? 'is-open' : '' }}">{{ $counter->is_active ? 'Buka' : 'Tutup' }}</span>
-                    </button>
-                @endforeach
+                        <span class="counter-state {{ $selectedCounter->is_active ? 'is-open' : '' }}">{{ $selectedCounter->is_active ? 'Buka' : 'Tutup' }}</span>
+                    </div>
+                @endif
             </div>
         @endif
 

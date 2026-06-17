@@ -811,6 +811,45 @@ class QueuePagesTest extends TestCase
         $response->assertDontSee('Masukkan');
     }
 
+    public function test_officer_dashboard_uses_counter_select_instead_of_long_counter_list(): void
+    {
+        Role::firstOrCreate(['name' => 'Super Admin']);
+
+        $admin = User::factory()->create([
+            'email' => 'counter-select-admin@example.test',
+            'password' => 'password123',
+        ]);
+        $admin->assignRole('Super Admin');
+
+        $service = QueueService::create([
+            'name' => 'Layanan Select Loket',
+            'slug' => 'layanan-select-loket',
+            'code' => 'LSL',
+            'sort_order' => 1,
+            'is_active' => true,
+        ]);
+
+        foreach (range(1, 3) as $number) {
+            ServiceCounter::create([
+                'queue_service_id' => $service->id,
+                'name' => 'Loket Select ' . $number,
+                'code' => 'LSL-' . $number,
+                'sort_order' => $number,
+                'is_active' => $number !== 3,
+            ]);
+        }
+
+        $response = $this->actingAs($admin)->get('/petugas');
+
+        $response->assertOk();
+        $response->assertSee('id="selectedCounterId"', false);
+        $response->assertSee('data-autocomplete-placeholder="Cari loket"', false);
+        $response->assertSee('Layanan Select Loket - Loket Select 1 (LSL-1)', false);
+        $response->assertSee('Layanan Select Loket - Loket Select 3 (LSL-3)', false);
+        $response->assertDontSee('class="counter-tab', false);
+        $response->assertDontSee('Daftar loket tugas');
+    }
+
     public function test_officer_applicant_direction_list_uses_mobile_cards_and_lazy_batches(): void
     {
         Role::firstOrCreate(['name' => 'officer']);
