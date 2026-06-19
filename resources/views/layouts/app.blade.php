@@ -557,10 +557,14 @@
             box-shadow: 20px 0 40px rgba(8, 31, 67, .22);
             padding: 20px 20px 24px;
             display: grid;
+            grid-template-rows: auto auto auto minmax(0, 1fr);
             align-content: start;
             gap: 16px;
-            min-height: 100vh;
-            min-height: 100svh;
+            height: 100vh;
+            height: 100svh;
+            max-height: 100vh;
+            max-height: 100svh;
+            overflow: hidden;
             transform: translateX(-102%);
             transition: transform .28s cubic-bezier(.2, .8, .2, 1);
         }
@@ -678,8 +682,29 @@
 
         .drawer-menu {
             display: grid;
+            align-content: start;
             gap: 8px;
             padding-top: 2px;
+            padding-right: 4px;
+            padding-bottom: calc(12px + env(safe-area-inset-bottom));
+            min-height: 0;
+            overflow-y: auto;
+            overscroll-behavior: contain;
+            scrollbar-width: thin;
+            scrollbar-color: #9fc5f8 transparent;
+        }
+
+        .drawer-menu::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .drawer-menu::-webkit-scrollbar-thumb {
+            background: #9fc5f8;
+            border-radius: 999px;
+        }
+
+        .drawer-menu::-webkit-scrollbar-track {
+            background: transparent;
         }
 
         .drawer-item {
@@ -740,6 +765,43 @@
             .btn { width: 100%; }
             .title { font-size: 21px; }
             .panel { padding: 14px; }
+        }
+
+        @media (max-height: 720px) {
+            .drawer {
+                gap: 10px;
+                padding: 14px 16px 18px;
+            }
+
+            .drawer-top {
+                min-height: 30px;
+            }
+
+            .drawer-close {
+                width: 30px;
+                height: 30px;
+            }
+
+            .avatar {
+                width: 70px;
+                height: 70px;
+                border-width: 3px;
+            }
+
+            .profile-name {
+                margin-top: 4px;
+                font-size: 15px;
+            }
+
+            .logout-button {
+                min-height: 38px;
+                padding: 9px 16px;
+            }
+
+            .drawer-item {
+                min-height: 42px;
+                padding: 7px 9px;
+            }
         }
     </style>
 </head>

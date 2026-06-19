@@ -330,6 +330,9 @@ class ExampleTest extends TestCase
         $response->assertSee('class="bottom-nav"', false);
         $response->assertSee('id="sideDrawer"', false);
         $response->assertSee('aria-hidden="true"', false);
+        $response->assertSee('grid-template-rows: auto auto auto minmax(0, 1fr);', false);
+        $response->assertSee('overflow-y: auto;', false);
+        $response->assertSee('overscroll-behavior: contain;', false);
         $response->assertSee('padding: 16px 14px 132px', false);
         $response->assertSee('left: 0;', false);
         $response->assertSee('right: 0;', false);
