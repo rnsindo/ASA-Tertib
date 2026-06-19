@@ -13,6 +13,7 @@ class ServiceCounter extends Model
         'assigned_user_id',
         'name',
         'code',
+        'announcement_audio_path',
         'sort_order',
         'is_active',
     ];

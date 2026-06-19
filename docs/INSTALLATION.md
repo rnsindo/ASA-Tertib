@@ -14,12 +14,17 @@
   - `openssl`
   - `tokenizer`
   - `xml`
+  - `xmlreader`
   - `xmlwriter`
+  - `simplexml`
+  - `dom`
   - `ctype`
   - `json`
   - `curl`
   - `fileinfo`
+  - `gd`
   - `zip`
+  - `zlib`
 - Node.js dan npm bersifat opsional untuk pengembangan asset. MVP saat ini tetap bisa tampil tanpa build Vite khusus karena layout utama memakai CSS inline.
 
 ## Langkah instalasi lokal
@@ -77,6 +82,8 @@ Jika akan menggunakan upload logo atau favicon dari halaman pengaturan, pastikan
 ```powershell
 php artisan storage:link
 ```
+
+Fitur upload/download template Excel pada `/data-peserta-ruangan` memakai package `maatwebsite/excel` dan membutuhkan ekstensi `zip`, `xmlreader`, `xmlwriter`, `simplexml`, `dom`, `gd`, serta `fileinfo` aktif di PHP hosting.
 
 Seeder akan membuat data dasar layanan, loket, setting aplikasi, sesi antrian hari berjalan, quota harian default aktif 200 per layanan, dan alokasi target loket awal.
 

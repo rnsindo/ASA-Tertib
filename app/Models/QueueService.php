@@ -12,6 +12,7 @@ class QueueService extends Model
         'slug',
         'code',
         'description',
+        'announcement_audio_path',
         'sort_order',
         'enforce_call_order',
         'is_active',

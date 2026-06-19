@@ -1,5 +1,10 @@
 # Change Log
 
+## 2026-06-18
+
+- Menambahkan dokumen rancangan `DISPLAY_QUEUE_CALL_DESIGN.md` untuk halaman standby display panggilan antrian, termasuk model event `queue_call_events`, polling ringan, audio queue browser, penanganan pemanggilan bersamaan, permission, fallback, dan WBS implementasi bertahap.
+- Mengimplementasikan halaman `/display-antrian`, endpoint polling `/display-antrian/events`, tabel/model `queue_call_events`, integrasi event pada tombol `Panggil`, audio queue browser Bahasa Indonesia, dan permission `petugas.display_antrian`.
+
 ## 2026-06-11
 
 - Membuat MVP aplikasi antrian universal untuk implementasi awal PSB SMK.
@@ -113,3 +118,5 @@
 - Mengubah tampilan kode manual di dashboard petugas menjadi OTP box terpisah per karakter agar lebih mudah dibaca saat ditunjukkan ke pendaftar.
 - Mengubah urutan `Status Layanan` pada dashboard pendaftar agar layanan yang bisa langsung diambil antrian tampil paling awal dan layanan bersyarat mengikuti urutan prasyaratnya.
 - Membatasi pendaftar agar hanya bisa memiliki satu antrian aktif lintas layanan, menambahkan pesan klik pada tombol layanan yang terkunci, serta menambahkan modal `Cabut Antrian` untuk membatalkan tiket yang masih menunggu.
+- Menambahkan halaman `/data-peserta-ruangan` untuk mengelola data NISN, Nama, SMP, Tanggal Lahir, dan Ruangan, lengkap dengan tabel `student_room_assignments`, download template Excel, upload template Excel/CSV, permission `admin.data_peserta_ruangan`, menu drawer, dan import upsert berdasarkan NISN.
+- Menambahkan halaman `/cek-ruangan` untuk semua akun login agar dapat mencari ruangan ujian berdasarkan NISN, memverifikasi tanggal lahir sebelum menampilkan ruangan, serta menampilkan username format `smk{NISN}` dan keterangan password diberikan di ruang ujian. Shortcut bottom nav `Ruangan` ditambahkan untuk pendaftar, petugas, dan Super Admin.

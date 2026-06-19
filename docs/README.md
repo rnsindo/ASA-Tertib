@@ -8,4 +8,5 @@ ASA-Tertib adalah MVP aplikasi antrian universal berbasis Laravel, MySQL, Livewi
 - `INSTALLATION.md` - kebutuhan sistem dan langkah instalasi baru.
 - `DESIGN_SYSTEM.md` - aturan baku desain biru-putih.
 - `PRESENCE_QUEUE_DESIGN.md` - rancangan sistem antrian wajib di tempat.
+- `DISPLAY_QUEUE_CALL_DESIGN.md` - rancangan halaman standby display panggilan antrian dan WBS implementasinya.
 - `CHANGELOG.md` - catatan perubahan penting yang tidak boleh hilang.

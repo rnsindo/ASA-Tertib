@@ -33,6 +33,8 @@ Jika callback Google menerima state OAuth yang sudah tidak cocok dengan session,
 - `/pengaturan-aplikasi` - halaman pengaturan aplikasi untuk Super Admin.
 - `/manajemen-user` - halaman manajemen user untuk Super Admin.
 - `/manajemen-layanan` - halaman manajemen layanan dan loket untuk Super Admin.
+- `/display-antrian` - halaman standalone display panggilan antrian untuk monitor/TV.
+- `/display-antrian/events` - endpoint polling event panggilan terbaru untuk display.
 - `/check-in/{token}` - endpoint scan QR ambil antrian untuk konfirmasi hadir.
 - `/manajemen-user/{user}/login-as` - aksi Super Admin untuk Login As user lain.
 - `/impersonate/leave` - aksi kembali dari Login As ke akun asli.
@@ -66,6 +68,7 @@ Permission petugas:
 - `petugas.beranda` - akses navigasi Home petugas.
 - `petugas.konsol_antrian` - akses konsol petugas/loket.
 - `petugas.kelola_qr_antrian` - membuat atau mengganti QR dan kode ambil antrian. Permission ini tidak diberikan default ke role `Petugas`; tambahkan manual pada akun petugas tertentu.
+- `petugas.display_antrian` - akses halaman display panggilan antrian. Permission ini tidak diberikan default ke role `Petugas`; tambahkan manual pada akun petugas tertentu jika display tidak dibuka oleh Super Admin.
 
 Permission pelanggan/penanya:
 
@@ -130,6 +133,7 @@ Demo account memakai password default `password123`.
 - `queue_services` - layanan antrian.
 - `service_counters` - loket pada setiap layanan, termasuk petugas yang ditugaskan melalui `assigned_user_id`.
 - `queue_tickets` - tiket antrian per layanan, loket, dan tanggal.
+- `queue_call_events` - event setiap kali petugas memanggil nomor antrian untuk display standby dan suara panggilan.
 - `queue_sessions` - sesi antrian per tanggal.
 - `queue_session_qr_codes` - token QR dan kode manual ambil antrian yang bisa diganti harian/jam.
 - `attendance_checkins` - konfirmasi hadir pendaftar melalui QR atau petugas.
@@ -312,6 +316,38 @@ Proses kembali ke akun asli memverifikasi hasil login ke guard aktif dan memakai
 
 Panel `/admin` lama sudah dihapus dari project.
 
+## Data peserta ruangan
+
+Halaman `/data-peserta-ruangan` menampung data master peserta berbasis NISN untuk kebutuhan penempatan ruangan. Halaman ini dilindungi permission `admin.data_peserta_ruangan`; role `Super Admin` mendapat akses karena role tersebut memiliki seluruh permission.
+
+Data disimpan pada tabel `student_room_assignments` dengan kolom:
+
+- `nisn` sebagai kode unik peserta;
+- `name` untuk nama peserta;
+- `junior_school` untuk asal SMP;
+- `birth_date` untuk tanggal lahir;
+- `room` untuk ruangan;
+- `imported_by` untuk mencatat akun yang terakhir mengupload/memperbarui data.
+
+Fitur halaman:
+
+- Tombol `Download Template` menghasilkan file Excel `.xlsx` berisi kolom `NISN`, `Nama`, `SMP`, `Tanggal Lahir`, dan `Ruangan`.
+- Upload template menerima file `.xlsx`, `.xls`, atau `.csv` maksimal 5 MB.
+- Upload memakai `maatwebsite/excel` dan `phpoffice/phpspreadsheet`.
+- Data di-upsert berdasarkan `NISN`, sehingga upload ulang memperbarui data peserta yang sama dan tidak menggandakan record.
+- Nama peserta, asal SMP, dan ruangan disimpan uppercase untuk menjaga format data seragam.
+- Tanggal lahir menerima Excel serial date atau teks umum seperti `2010-05-21`, `21/05/2010`, dan `21-05-2010`.
+- Baris yang tidak valid dilewati dan ditampilkan sebagai catatan error, sedangkan baris valid tetap tersimpan.
+- Daftar data memakai tampilan card mobile dengan pencarian cepat berdasarkan NISN, nama, SMP, atau ruangan.
+
+Halaman `/cek-ruangan` tersedia untuk seluruh akun login, baik pendaftar, petugas, maupun Super Admin. Halaman ini memakai data dari `student_room_assignments` untuk pencarian ruangan ujian:
+
+- Pengguna mencari data dengan NISN.
+- Jika ditemukan, aplikasi hanya menampilkan Nama Lengkap, NISN, dan SMP.
+- Tombol `Cek Ruangan` meminta tanggal lahir sebagai verifikasi tambahan.
+- Jika tanggal lahir sesuai, aplikasi menampilkan Ruangan Tempat Ujian, username dengan format `smk` + `NISN`, dan keterangan password `Akan diberikan saat sudah di ruang ujian.`
+- Item bottom navigation yang belum dipakai diganti menjadi `Ruangan`: pada nav pendaftar menggantikan `Riwayat`, dan pada nav petugas/Super Admin menggantikan shortcut `Antrian` duplikat. Drawer juga memiliki item `Cek Ruangan Ujian` untuk semua akun login.
+
 ## Manajemen layanan
 
 Halaman `/manajemen-layanan` dan menu drawer dilindungi permission `admin.manajemen_layanan`. Implementasi awal dibuat untuk Super Admin.
@@ -361,3 +397,26 @@ Bagian `Tidak di Tempat Hari Ini` juga memakai card mobile. Setiap card menampil
 Bagian `Riwayat Antrian Loket Ini` ditempatkan paling bawah pada dashboard petugas. Section ini menampilkan tiket hari berjalan yang sudah `Selesai` atau `Dibatalkan` pada loket yang sedang dipilih. Tombol `Masukkan Kembali` membuka modal pilih loket tujuan, lalu membuat tiket baru untuk pendaftar yang sama pada loket tujuan tersebut. Tiket riwayat lama tetap disimpan sebagai selesai/dibatalkan dan diberi catatan bahwa pendaftar dimasukkan kembali.
 
 Halaman `/petugas/loket-lain` menjadi halaman khusus `Daftar Loket Lain`. Menu nav bawah petugas berlabel `Loket` mengarah ke halaman ini. Data ditampilkan sebagai card per loket dengan ringkasan `Menunggu`, `Selesai`, dan `Tidak di Tempat` untuk tanggal berjalan.
+
+## Display panggilan antrian
+
+Halaman `/display-antrian` adalah halaman standalone tanpa header, drawer, dan bottom navigation aplikasi. Halaman ini disiapkan untuk TV, monitor, tablet, atau browser HP yang standby menampilkan panggilan antrian.
+
+Akses halaman dilindungi permission `petugas.display_antrian`. Role `Super Admin` mendapat permission ini melalui seeder karena role tersebut mendapat seluruh permission. Role `Petugas` tidak mendapat permission ini secara default, sehingga akses display dapat diberikan manual hanya ke akun tertentu.
+
+Saat petugas menekan tombol `Panggil` di dashboard `/petugas`, sistem:
+
+1. mengubah status tiket menjadi `called`;
+2. mengisi `called_at` dan `handled_by`;
+3. membuat record baru pada `queue_call_events`.
+
+Event panggilan dibuat terpisah dari status tiket agar panggilan ulang atau beberapa loket yang memanggil dalam waktu berdekatan tetap tercatat sebagai event terpisah. Payload event menyimpan snapshot nomor tiket, nama layanan, nama loket, nama pendaftar, dan `announcement_text`.
+
+Display membaca data melalui endpoint `/display-antrian/events` dengan polling ringan sekitar 1,5 detik. Endpoint mengembalikan:
+
+- `latest_call` untuk nomor utama yang tampil besar;
+- `new_events` untuk event baru berdasarkan `after_id`;
+- `recent_calls` untuk daftar panggilan terakhir;
+- `counter_statuses` untuk status setiap loket dan jumlah antrian menunggu.
+
+Audio browser memakai Web Speech API dengan Bahasa Indonesia. Karena browser tidak mengizinkan audio otomatis sebelum interaksi pengguna, display menyediakan tombol `Aktifkan Suara`. Setelah aktif, event baru dimasukkan ke queue JavaScript dan dibacakan satu per satu agar suara tidak tumpang tindih ketika beberapa loket memanggil bersamaan.

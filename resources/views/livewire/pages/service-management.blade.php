@@ -512,6 +512,19 @@
                         @error('serviceDescription') <span class="error">{{ $message }}</span> @enderror
                     </div>
 
+                    <div class="field">
+                        <label for="serviceAnnouncementAudio">Audio Nama Layanan</label>
+                        <input id="serviceAnnouncementAudio" class="input" type="file" wire:model="serviceAnnouncementAudio" accept="audio/mpeg,audio/wav,audio/ogg,audio/mp4">
+                        <span class="muted" style="font-size: 12px;">Rekam hanya nama layanan dengan suara jelas, misalnya “Verifikasi Berkas”. Maksimal 5 MB.</span>
+                        @if($serviceExistingAnnouncementAudioPath)
+                            <audio controls preload="none" style="width: 100%; margin-top: 8px;">
+                                <source src="{{ \Illuminate\Support\Facades\Storage::disk('public')->url($serviceExistingAnnouncementAudioPath) }}">
+                            </audio>
+                        @endif
+                        <span wire:loading wire:target="serviceAnnouncementAudio" class="muted" style="font-size: 12px;">Mengunggah audio...</span>
+                        @error('serviceAnnouncementAudio') <span class="error">{{ $message }}</span> @enderror
+                    </div>
+
                     <div class="switch-line">
                         <strong>Layanan Aktif</strong>
                         <label class="switch" aria-label="Layanan Aktif">
@@ -712,6 +725,19 @@
                             @endforeach
                         </select>
                         @error('counterOfficerId') <span class="error">{{ $message }}</span> @enderror
+                    </div>
+
+                    <div class="field">
+                        <label for="counterAnnouncementAudio">Audio Nama Loket</label>
+                        <input id="counterAnnouncementAudio" class="input" type="file" wire:model="counterAnnouncementAudio" accept="audio/mpeg,audio/wav,audio/ogg,audio/mp4">
+                        <span class="muted" style="font-size: 12px;">Rekam nama loket secara lengkap, misalnya “Loket Wawancara Satu”. Maksimal 5 MB.</span>
+                        @if($counterExistingAnnouncementAudioPath)
+                            <audio controls preload="none" style="width: 100%; margin-top: 8px;">
+                                <source src="{{ \Illuminate\Support\Facades\Storage::disk('public')->url($counterExistingAnnouncementAudioPath) }}">
+                            </audio>
+                        @endif
+                        <span wire:loading wire:target="counterAnnouncementAudio" class="muted" style="font-size: 12px;">Mengunggah audio...</span>
+                        @error('counterAnnouncementAudio') <span class="error">{{ $message }}</span> @enderror
                     </div>
 
                     <div class="switch-line">

@@ -10,19 +10,25 @@ use App\Models\AppSetting;
 use App\Models\User;
 use App\Services\QueueRuntimeService;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
 use Livewire\Component;
+use Livewire\WithFileUploads;
 
 #[Layout('layouts.app')]
 #[Title('Manajemen Layanan')]
 class ServiceManagement extends Component
 {
+    use WithFileUploads;
+
     public string $serviceName = '';
     public string $serviceDescription = '';
+    public $serviceAnnouncementAudio = null;
+    public ?string $serviceExistingAnnouncementAudioPath = null;
     public string $serviceSortOrder = '0';
     public bool $serviceEnforceCallOrder = true;
     public bool $serviceIsActive = true;
@@ -34,6 +40,8 @@ class ServiceManagement extends Component
     public string $editingServiceCode = '';
     public ?int $selectedServiceId = null;
     public string $counterName = '';
+    public $counterAnnouncementAudio = null;
+    public ?string $counterExistingAnnouncementAudioPath = null;
     public string $counterOfficerId = '';
     public bool $counterIsActive = true;
     public bool $isCounterModalOpen = false;
@@ -59,11 +67,17 @@ class ServiceManagement extends Component
 
         try {
             $service = DB::transaction(function () use ($validated, $runtime): QueueService {
+                $announcementAudioPath = $this->storeAnnouncementAudio(
+                    $this->serviceAnnouncementAudio,
+                    'announcement/services',
+                );
+
                 $service = QueueService::query()->create([
                     'name' => trim($validated['serviceName']),
                     'slug' => $this->uniqueServiceSlug($validated['serviceName']),
                     'code' => $this->uniqueServiceCode($validated['serviceName']),
                     'description' => trim((string) $validated['serviceDescription']) ?: null,
+                    'announcement_audio_path' => $announcementAudioPath,
                     'sort_order' => (int) $validated['serviceSortOrder'],
                     'enforce_call_order' => (bool) $validated['serviceEnforceCallOrder'],
                     'is_active' => (bool) $validated['serviceIsActive'],
@@ -112,15 +126,25 @@ class ServiceManagement extends Component
 
         try {
             DB::transaction(function () use ($service, $validated): void {
+                $oldAudioPath = $service->announcement_audio_path;
+                $announcementAudioPath = $this->serviceAnnouncementAudio
+                    ? $this->storeAnnouncementAudio($this->serviceAnnouncementAudio, 'announcement/services')
+                    : $oldAudioPath;
+
                 $service->forceFill([
                     'name' => trim($validated['serviceName']),
                     'description' => trim((string) $validated['serviceDescription']) ?: null,
+                    'announcement_audio_path' => $announcementAudioPath,
                     'sort_order' => (int) $validated['serviceSortOrder'],
                     'enforce_call_order' => (bool) $validated['serviceEnforceCallOrder'],
                     'is_active' => (bool) $validated['serviceIsActive'],
                 ])->save();
 
                 $this->saveServiceDependency($service, $validated);
+
+                if ($this->serviceAnnouncementAudio && $oldAudioPath && $oldAudioPath !== $announcementAudioPath) {
+                    Storage::disk('public')->delete($oldAudioPath);
+                }
             });
 
             $this->selectedServiceId = $service->id;
@@ -152,6 +176,8 @@ class ServiceManagement extends Component
         $this->editingServiceCode = $service->code;
         $this->serviceName = $service->name;
         $this->serviceDescription = (string) $service->description;
+        $this->serviceAnnouncementAudio = null;
+        $this->serviceExistingAnnouncementAudioPath = $service->announcement_audio_path;
         $this->serviceSortOrder = (string) $service->sort_order;
         $this->serviceEnforceCallOrder = (bool) $service->enforce_call_order;
         $this->serviceIsActive = (bool) $service->is_active;
@@ -205,6 +231,8 @@ class ServiceManagement extends Component
         $this->editingCounterId = $counter->id;
         $this->editingCounterCode = $counter->code;
         $this->counterName = $counter->name;
+        $this->counterAnnouncementAudio = null;
+        $this->counterExistingAnnouncementAudioPath = $counter->announcement_audio_path;
         $this->counterOfficerId = $counter->assigned_user_id ? (string) $counter->assigned_user_id : '';
         $this->counterIsActive = (bool) $counter->is_active;
         $this->selectedServiceId = $counter->queue_service_id;
@@ -232,11 +260,17 @@ class ServiceManagement extends Component
         $validated = $this->validateCounterPayload('ditambahkan');
 
         try {
+            $announcementAudioPath = $this->storeAnnouncementAudio(
+                $this->counterAnnouncementAudio,
+                'announcement/counters',
+            );
+
             ServiceCounter::query()->create([
                 'queue_service_id' => $service->id,
                 'assigned_user_id' => $validated['counterOfficerId'] !== '' ? (int) $validated['counterOfficerId'] : null,
                 'name' => trim($validated['counterName']),
                 'code' => $this->uniqueCounterCode($validated['counterName']),
+                'announcement_audio_path' => $announcementAudioPath,
                 'sort_order' => ((int) $service->counters()->max('sort_order')) + 1,
                 'is_active' => (bool) $validated['counterIsActive'],
             ]);
@@ -266,11 +300,21 @@ class ServiceManagement extends Component
         $validated = $this->validateCounterPayload('diperbarui');
 
         try {
+            $oldAudioPath = $counter->announcement_audio_path;
+            $announcementAudioPath = $this->counterAnnouncementAudio
+                ? $this->storeAnnouncementAudio($this->counterAnnouncementAudio, 'announcement/counters')
+                : $oldAudioPath;
+
             $counter->forceFill([
                 'assigned_user_id' => $validated['counterOfficerId'] !== '' ? (int) $validated['counterOfficerId'] : null,
                 'name' => trim($validated['counterName']),
+                'announcement_audio_path' => $announcementAudioPath,
                 'is_active' => (bool) $validated['counterIsActive'],
             ])->save();
+
+            if ($this->counterAnnouncementAudio && $oldAudioPath && $oldAudioPath !== $announcementAudioPath) {
+                Storage::disk('public')->delete($oldAudioPath);
+            }
 
             if ($counter->service) {
                 $runtime->ensureAllocations($counter->service);
@@ -385,6 +429,8 @@ class ServiceManagement extends Component
     {
         $this->serviceName = '';
         $this->serviceDescription = '';
+        $this->serviceAnnouncementAudio = null;
+        $this->serviceExistingAnnouncementAudioPath = null;
         $this->serviceSortOrder = '0';
         $this->serviceEnforceCallOrder = true;
         $this->serviceIsActive = true;
@@ -393,17 +439,19 @@ class ServiceManagement extends Component
         $this->requiredStatusMode = QueueServiceDependency::MODE_COMPLETED;
         $this->editingServiceId = null;
         $this->editingServiceCode = '';
-        $this->resetErrorBag(['serviceName', 'serviceDescription', 'serviceSortOrder', 'requiredServiceId', 'requiredStatusMode']);
+        $this->resetErrorBag(['serviceName', 'serviceDescription', 'serviceAnnouncementAudio', 'serviceSortOrder', 'requiredServiceId', 'requiredStatusMode']);
     }
 
     private function resetCounterForm(): void
     {
         $this->counterName = '';
+        $this->counterAnnouncementAudio = null;
+        $this->counterExistingAnnouncementAudioPath = null;
         $this->counterOfficerId = '';
         $this->counterIsActive = true;
         $this->editingCounterId = null;
         $this->editingCounterCode = '';
-        $this->resetErrorBag(['counterName', 'counterOfficerId']);
+        $this->resetErrorBag(['counterName', 'counterAnnouncementAudio', 'counterOfficerId']);
     }
 
     private function uniqueServiceSlug(string $name): string
@@ -463,12 +511,14 @@ class ServiceManagement extends Component
         try {
             return $this->validate([
                 'counterName' => ['required', 'string', 'max:120'],
+                'counterAnnouncementAudio' => ['nullable', 'file', 'mimes:mp3,wav,ogg,m4a', 'max:5120'],
                 'counterOfficerId' => ['nullable', Rule::in($this->officerUserIds())],
                 'counterIsActive' => ['boolean'],
             ], [
                 'counterOfficerId.in' => 'Petugas loket yang dipilih tidak valid.',
             ], [
                 'counterName' => 'nama loket',
+                'counterAnnouncementAudio' => 'audio panggilan loket',
                 'counterOfficerId' => 'petugas loket',
             ]);
         } catch (ValidationException $exception) {
@@ -495,6 +545,7 @@ class ServiceManagement extends Component
         $validated = $this->validate([
             'serviceName' => ['required', 'string', 'max:120'],
             'serviceDescription' => ['nullable', 'string', 'max:500'],
+            'serviceAnnouncementAudio' => ['nullable', 'file', 'mimes:mp3,wav,ogg,m4a', 'max:5120'],
             'serviceSortOrder' => ['required', 'integer', 'min:0', 'max:65535'],
             'serviceEnforceCallOrder' => ['boolean'],
             'serviceIsActive' => ['boolean'],
@@ -507,6 +558,7 @@ class ServiceManagement extends Component
         ], [
             'serviceName' => 'nama layanan',
             'serviceDescription' => 'deskripsi layanan',
+            'serviceAnnouncementAudio' => 'audio panggilan layanan',
             'serviceSortOrder' => 'urutan tampil pendaftar',
             'serviceEnforceCallOrder' => 'wajib panggil berurutan',
             'serviceRequiresPrevious' => 'syarat layanan sebelumnya',
@@ -701,5 +753,14 @@ class ServiceManagement extends Component
     private function notify(string $type, string $message): void
     {
         $this->dispatch('service-notify', type: $type, message: $message);
+    }
+
+    private function storeAnnouncementAudio(mixed $upload, string $directory): ?string
+    {
+        if (! $upload) {
+            return null;
+        }
+
+        return $upload->store($directory, 'public');
     }
 }

@@ -24,6 +24,7 @@ class DatabaseSeeder extends Seeder
             QueueServiceSeeder::class,
             QueueServiceDependencySeeder::class,
             ServiceCounterSeeder::class,
+            QueueAnnouncementAudioSeeder::class,
             ServiceDailyQuotaSeeder::class,
         ]);
 

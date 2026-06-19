@@ -19,17 +19,18 @@ class ServiceCounterSeeder extends Seeder
         $interview = QueueService::query()->where('slug', 'wawancara')->firstOrFail();
 
         collect([
-            [$verification, 'Loket Verifikasi 1', 'VB-1', 1],
-            [$verification, 'Loket Verifikasi 2', 'VB-2', 2],
-            [$interview, 'Loket Wawancara 1', 'WW-1', 1],
-            [$interview, 'Loket Wawancara 2', 'WW-2', 2],
+            [$verification, 'Loket Verifikasi 1', 'VB-1', 1, 'announcement/counters/loket-verifikasi-1.mp3'],
+            [$verification, 'Loket Verifikasi 2', 'VB-2', 2, 'announcement/counters/loket-verifikasi-2.mp3'],
+            [$interview, 'Loket Wawancara 1', 'WW-1', 1, 'announcement/counters/loket-wawancara-1.mp3'],
+            [$interview, 'Loket Wawancara 2', 'WW-2', 2, 'announcement/counters/loket-wawancara-2.mp3'],
         ])->each(function (array $row) use ($officer): void {
-            [$service, $name, $code, $sortOrder] = $row;
+            [$service, $name, $code, $sortOrder, $announcementAudioPath] = $row;
 
             $this->seedModel(ServiceCounter::class, ['code' => $code], [
                 'queue_service_id' => $service->id,
                 'assigned_user_id' => $sortOrder === 1 ? $officer?->id : null,
                 'name' => $name,
+                'announcement_audio_path' => $announcementAudioPath,
                 'sort_order' => $sortOrder,
                 'is_active' => true,
             ]);

@@ -4,6 +4,7 @@ namespace App\Livewire\Pages;
 
 use App\Models\Applicant;
 use App\Models\AttendanceCheckin;
+use App\Models\QueueCallEvent;
 use App\Models\QueueService;
 use App\Models\QueueTicket;
 use App\Models\ServiceCounter;
@@ -307,7 +308,7 @@ class OfficerQueueConsole extends Component
 
     public function callTicket(int $ticketId): void
     {
-        $ticket = QueueTicket::with(['counter', 'service'])->findOrFail($ticketId);
+        $ticket = QueueTicket::with(['applicant', 'counter', 'service', 'session'])->findOrFail($ticketId);
         $this->authorizeTicketCounter($ticket);
 
         if ($ticket->status !== QueueTicket::STATUS_WAITING || ! $ticket->counter) {
@@ -324,11 +325,31 @@ class OfficerQueueConsole extends Component
             return;
         }
 
-        $ticket->update([
-            'status' => QueueTicket::STATUS_CALLED,
-            'called_at' => now(),
-            'handled_by' => auth()->id(),
-        ]);
+        $calledAt = now();
+
+        DB::transaction(function () use ($ticket, $calledAt): void {
+            $ticket->update([
+                'status' => QueueTicket::STATUS_CALLED,
+                'called_at' => $calledAt,
+                'handled_by' => auth()->id(),
+            ]);
+
+            $ticket->refresh()->loadMissing(['applicant', 'counter', 'service', 'session']);
+
+            QueueCallEvent::create([
+                'queue_session_id' => $ticket->queue_session_id ?: app(QueueRuntimeService::class)->currentSession()->id,
+                'queue_ticket_id' => $ticket->id,
+                'queue_service_id' => $ticket->queue_service_id,
+                'service_counter_id' => $ticket->service_counter_id,
+                'called_by' => auth()->id(),
+                'ticket_code' => $ticket->ticket_code,
+                'service_name' => $ticket->service?->name ?? 'Layanan',
+                'counter_name' => $ticket->counter?->name ?? 'Loket',
+                'applicant_name' => $ticket->applicant?->full_name,
+                'announcement_text' => $this->announcementText($ticket),
+                'called_at' => $calledAt,
+            ]);
+        });
     }
 
     public function startTicket(int $ticketId): void
@@ -659,6 +680,15 @@ class OfficerQueueConsole extends Component
     private function appendTicketNote(QueueTicket $ticket, string $note): string
     {
         return trim(($ticket->notes ? $ticket->notes . "\n" : '') . $note);
+    }
+
+    private function announcementText(QueueTicket $ticket): string
+    {
+        $ticketCode = $ticket->ticket_code ?: 'nomor antrian';
+        $counterName = $ticket->counter?->name ?? 'loket tujuan';
+        $serviceName = $ticket->service?->name ?? 'layanan';
+
+        return 'Nomor antrian ' . $ticketCode . ', menuju ' . $counterName . ', layanan ' . $serviceName . '.';
     }
 
     private function selectedCounter(): ?ServiceCounter

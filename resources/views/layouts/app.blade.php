@@ -765,6 +765,8 @@
             || ($currentUser?->hasAnyRole(['superadmin', 'Super Admin']) ?? false);
         $canServiceManagement = ($currentUser?->can('admin.manajemen_layanan') ?? false)
             || ($currentUser?->hasAnyRole(['superadmin', 'Super Admin']) ?? false);
+        $canStudentRoomData = ($currentUser?->can('admin.data_peserta_ruangan') ?? false)
+            || ($currentUser?->hasAnyRole(['superadmin', 'Super Admin']) ?? false);
         $canCustomerHome = ($currentUser?->can('pelanggan.beranda') ?? false)
             || $hasCustomerRole;
         $canOfficerHome = ($currentUser?->can('petugas.beranda') ?? false)
@@ -839,9 +841,9 @@
         @auth
             <nav class="bottom-nav" aria-label="Navigasi bawah">
                 @if($showOfficerBottomNav)
-                    <a class="nav-item" href="{{ route('officer.console') }}">
-                        <span class="nav-icon"><svg viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13"/><path d="M3 6h.01M3 12h.01M3 18h.01"/></svg></span>
-                        Antrian
+                    <a class="nav-item {{ request()->routeIs('exam-room.lookup') ? 'active' : '' }}" href="{{ route('exam-room.lookup') }}">
+                        <span class="nav-icon"><svg viewBox="0 0 24 24"><path d="M4 19.5V5a2 2 0 0 1 2-2h11"/><path d="M6 17h12a2 2 0 0 1 0 4H6a2 2 0 0 1 0-4Z"/><path d="M9 7h6"/><path d="M9 11h4"/></svg></span>
+                        Ruangan
                     </a>
                     <a class="nav-item {{ request()->routeIs('officer.other-counters') ? 'active' : '' }}" href="{{ route('officer.other-counters') }}">
                         <span class="nav-icon"><svg viewBox="0 0 24 24"><path d="M4 6h16"/><path d="M4 12h16"/><path d="M4 18h16"/><path d="M8 6v12"/><path d="M16 6v12"/></svg></span>
@@ -893,9 +895,9 @@
                     </a>
                     @endif
                     @if($canCustomerHistory)
-                        <a class="nav-item" href="#">
-                            <span class="nav-icon"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8M8 17h6"/></svg></span>
-                            Riwayat
+                        <a class="nav-item {{ request()->routeIs('exam-room.lookup') ? 'active' : '' }}" href="{{ route('exam-room.lookup') }}">
+                            <span class="nav-icon"><svg viewBox="0 0 24 24"><path d="M4 19.5V5a2 2 0 0 1 2-2h11"/><path d="M6 17h12a2 2 0 0 1 0 4H6a2 2 0 0 1 0-4Z"/><path d="M9 7h6"/><path d="M9 11h4"/></svg></span>
+                            Ruangan
                         </a>
                     @endif
                     @if($canCustomerProfile)
@@ -954,6 +956,10 @@
                             <span>Profil Akun</span>
                         </a>
                     @endif
+                    <a class="drawer-item {{ request()->routeIs('exam-room.lookup') ? 'active' : '' }}" href="{{ route('exam-room.lookup') }}">
+                        <span class="drawer-icon"><svg viewBox="0 0 24 24"><path d="M4 19.5V5a2 2 0 0 1 2-2h11"/><path d="M6 17h12a2 2 0 0 1 0 4H6a2 2 0 0 1 0-4Z"/><path d="M9 7h6"/><path d="M9 11h4"/></svg></span>
+                        <span>Cek Ruangan Ujian</span>
+                    </a>
                     @if($canOfficerConsole)
                         <a class="drawer-item {{ request()->routeIs('officer.console') ? 'active' : '' }}" href="{{ route('officer.console') }}">
                             <span class="drawer-icon"><svg viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13"/><path d="M3 6h.01M3 12h.01M3 18h.01"/></svg></span>
@@ -970,6 +976,12 @@
                         <a class="drawer-item {{ request()->routeIs('users.management') ? 'active' : '' }}" href="{{ route('users.management') }}">
                             <span class="drawer-icon"><svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><path d="M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>
                             <span>Manajemen User</span>
+                        </a>
+                    @endif
+                    @if($canStudentRoomData)
+                        <a class="drawer-item {{ request()->routeIs('student-room-data.*') ? 'active' : '' }}" href="{{ route('student-room-data.index') }}">
+                            <span class="drawer-icon"><svg viewBox="0 0 24 24"><path d="M4 19.5V5a2 2 0 0 1 2-2h11"/><path d="M6 17h12a2 2 0 0 1 0 4H6a2 2 0 0 1 0-4Z"/><path d="M9 7h6"/><path d="M9 11h4"/></svg></span>
+                            <span>Data Peserta Ruangan</span>
                         </a>
                     @endif
                     @can('admin.pengaturan_aplikasi')

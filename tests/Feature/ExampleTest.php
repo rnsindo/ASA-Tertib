@@ -354,7 +354,8 @@ class ExampleTest extends TestCase
         $response->assertSee('Status');
         $response->assertSee('Scan QR');
         $response->assertSee('Home');
-        $response->assertSee('Riwayat');
+        $response->assertSee('Ruangan');
+        $response->assertSee(route('exam-room.lookup'), false);
         $response->assertSee('Profil');
     }
 
@@ -371,7 +372,8 @@ class ExampleTest extends TestCase
 
         $response->assertOk();
         $response->assertSee('class="bottom-nav"', false);
-        $response->assertSee('Antrian');
+        $response->assertSee('Ruangan');
+        $response->assertSee(route('exam-room.lookup'), false);
         $response->assertSee('Loket');
         $response->assertSee(route('officer.other-counters'), false);
         $response->assertSee('Home');
@@ -399,7 +401,8 @@ class ExampleTest extends TestCase
 
         $response->assertOk();
         $response->assertSee('class="bottom-nav"', false);
-        $response->assertSee('Antrian');
+        $response->assertSee('Ruangan');
+        $response->assertSee(route('exam-room.lookup'), false);
         $response->assertSee('Loket');
         $response->assertSee(route('officer.other-counters'), false);
         $response->assertSee('Home');

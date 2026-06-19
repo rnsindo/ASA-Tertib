@@ -1,8 +1,10 @@
 <?php
 
 use App\Http\Controllers\Auth\GoogleAuthController;
+use App\Http\Controllers\QueueDisplayController;
 use App\Http\Controllers\QueueCheckInController;
 use App\Http\Controllers\QueueQrPrintController;
+use App\Http\Controllers\StudentRoomTemplateController;
 use App\Http\Controllers\UserImpersonationController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -34,10 +36,15 @@ Route::middleware(['auth', 'account.active'])->group(function () {
     Route::livewire('/dashboard', 'pages.applicant-dashboard')->name('dashboard');
     Route::livewire('/petugas', 'pages.officer-queue-console')->name('officer.console');
     Route::livewire('/petugas/loket-lain', 'pages.officer-other-counters')->name('officer.other-counters');
+    Route::livewire('/cek-ruangan', 'pages.exam-room-lookup')->name('exam-room.lookup');
     Route::livewire('/profil', 'pages.account-profile')->name('profile.account');
     Route::livewire('/pengaturan-aplikasi', 'pages.application-settings')->name('settings.application');
     Route::livewire('/manajemen-user', 'pages.user-management')->name('users.management');
     Route::livewire('/manajemen-layanan', 'pages.service-management')->name('services.management');
+    Route::livewire('/data-peserta-ruangan', 'pages.student-room-data')->name('student-room-data.index');
+    Route::get('/data-peserta-ruangan/template', StudentRoomTemplateController::class)->name('student-room-data.template');
+    Route::get('/display-antrian', [QueueDisplayController::class, 'index'])->name('display.queue');
+    Route::get('/display-antrian/events', [QueueDisplayController::class, 'events'])->name('display.queue.events');
     Route::get('/check-in/{token}', QueueCheckInController::class)->name('queue.check-in');
     Route::get('/petugas/qr-ambil-antrian/print', QueueQrPrintController::class)->name('officer.queue-qr.print');
     Route::post('/manajemen-user/{user}/login-as', [UserImpersonationController::class, 'take'])->name('users.impersonate.take');
