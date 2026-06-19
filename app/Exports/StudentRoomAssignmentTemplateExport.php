@@ -25,7 +25,7 @@ class StudentRoomAssignmentTemplateExport implements FromArray, ShouldAutoSize, 
     public function array(): array
     {
         return [
-            ['1234567890', 'CONTOH NAMA SISWA', 'SMP CONTOH', '2010-05-21', 'RUA1'],
+            ['1234567890', 'CONTOH NAMA SISWA', 'SMP CONTOH', '06-02-2008', 'RUA1'],
         ];
     }
 
@@ -33,7 +33,7 @@ class StudentRoomAssignmentTemplateExport implements FromArray, ShouldAutoSize, 
     {
         $sheet->getStyle('A1:E1')->getFont()->setBold(true);
         $sheet->getStyle('A2:A500')->getNumberFormat()->setFormatCode(NumberFormat::FORMAT_TEXT);
-        $sheet->getStyle('D2:D500')->getNumberFormat()->setFormatCode('yyyy-mm-dd');
+        $sheet->getStyle('D2:D500')->getNumberFormat()->setFormatCode('dd-mm-yyyy');
 
         return [];
     }

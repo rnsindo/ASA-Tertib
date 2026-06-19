@@ -146,7 +146,7 @@
                 wire:model="templateFile"
                 accept=".xlsx,.xls,.csv"
             >
-            <div class="muted" style="font-size: 13px;">Format kolom: NISN, Nama, SMP, Tanggal Lahir, Ruangan. Upload ulang akan memperbarui data dengan NISN yang sama.</div>
+            <div class="muted" style="font-size: 13px;">Format kolom: NISN, Nama, SMP, Tanggal Lahir, Ruangan. Tanggal lahir dapat ditulis tanggal-bulan-tahun, contoh 06-02-2008. Upload ulang akan memperbarui data dengan NISN yang sama.</div>
             @error('templateFile')
                 <div class="error">{{ $message }}</div>
             @enderror

@@ -83,8 +83,9 @@ class StudentRoomDataTest extends TestCase
 
         $file = $this->makeTemplateUpload([
             ['NISN', 'Nama', 'SMP', 'Tanggal Lahir', 'Ruangan'],
-            ['1234567890', 'nama baru', 'smp baru', '2010-05-21', 'RUA1'],
+            ['1234567890', 'nama baru', 'smp baru', '06-02-2008', 'RUA1'],
             ['9998887776', 'peserta baru', 'smp asal', '22/06/2010', 'RUA2'],
+            ['9998887777', 'peserta strip lain', 'smp strip', '11-05-2008', 'RUA3'],
             ['ABC', 'nisn salah', 'smp salah', '2010-01-01', 'RUA3'],
         ]);
 
@@ -93,16 +94,17 @@ class StudentRoomDataTest extends TestCase
             ->set('templateFile', $file)
             ->call('uploadTemplate')
             ->assertHasNoErrors()
-            ->assertSee('1 data baru')
+            ->assertSee('2 data baru')
             ->assertSee('1 data diperbarui')
             ->assertSee('1 baris dilewati');
 
         $updated = StudentRoomAssignment::where('nisn', '1234567890')->firstOrFail();
         $created = StudentRoomAssignment::where('nisn', '9998887776')->firstOrFail();
+        $createdFromDashDate = StudentRoomAssignment::where('nisn', '9998887777')->firstOrFail();
 
         $this->assertSame('NAMA BARU', $updated->name);
         $this->assertSame('SMP BARU', $updated->junior_school);
-        $this->assertSame('2010-05-21', $updated->birth_date->toDateString());
+        $this->assertSame('2008-02-06', $updated->birth_date->toDateString());
         $this->assertSame('RUA1', $updated->room);
         $this->assertSame($user->id, $updated->imported_by);
 
@@ -111,6 +113,9 @@ class StudentRoomDataTest extends TestCase
         $this->assertSame('2010-06-22', $created->birth_date->toDateString());
         $this->assertSame('RUA2', $created->room);
         $this->assertSame($user->id, $created->imported_by);
+
+        $this->assertSame('PESERTA STRIP LAIN', $createdFromDashDate->name);
+        $this->assertSame('2008-05-11', $createdFromDashDate->birth_date->toDateString());
 
         $this->assertDatabaseMissing('student_room_assignments', [
             'nisn' => 'ABC',

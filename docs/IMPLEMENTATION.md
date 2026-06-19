@@ -336,7 +336,7 @@ Fitur halaman:
 - Upload memakai `maatwebsite/excel` dan `phpoffice/phpspreadsheet`.
 - Data di-upsert berdasarkan `NISN`, sehingga upload ulang memperbarui data peserta yang sama dan tidak menggandakan record.
 - Nama peserta, asal SMP, dan ruangan disimpan uppercase untuk menjaga format data seragam.
-- Tanggal lahir menerima Excel serial date atau teks umum seperti `2010-05-21`, `21/05/2010`, dan `21-05-2010`.
+- Tanggal lahir menerima Excel serial date atau teks umum. Format utama yang disarankan untuk import adalah `dd-mm-yyyy`, misalnya `06-02-2008`, `11-05-2008`, atau `22-12-2008`. Sistem juga tetap menerima `yyyy-mm-dd` dan `dd/mm/yyyy`.
 - Baris yang tidak valid dilewati dan ditampilkan sebagai catatan error, sedangkan baris valid tetap tersimpan.
 - Daftar data memakai tampilan card mobile dengan pencarian cepat berdasarkan NISN, nama, SMP, atau ruangan.
 

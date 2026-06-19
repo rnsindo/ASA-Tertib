@@ -55,6 +55,10 @@ class StudentRoomData extends Component
         ]);
 
         try {
+            if (! class_exists(Excel::class)) {
+                throw new \RuntimeException('Package Excel belum tersedia di server. Jalankan composer install --no-dev --optimize-autoloader lalu php artisan optimize:clear.');
+            }
+
             $import = new StudentRoomAssignmentImport(auth()->id());
 
             Excel::import($import, $this->templateFile->getRealPath());
